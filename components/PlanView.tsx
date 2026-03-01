@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Colors } from '@/constants/colors';
 import { TripPlan } from '@/types/trip';
-import { formatDateRange } from '@/utils/helpers';
+import { formatDateRange, formatDisplayDate } from '@/utils/helpers';
 
 interface PlanViewProps {
   plan: TripPlan;
@@ -167,7 +167,7 @@ function ItineraryTab({ plan }: { plan: TripPlan }) {
             </View>
             <View>
               <Text style={styles.dayTitle}>{day.title}</Text>
-              <Text style={styles.dayDate}>{day.date}</Text>
+              <Text style={styles.dayDate}>{formatDisplayDate(day.date) || day.date}</Text>
             </View>
           </View>
           <View style={styles.timeline}>

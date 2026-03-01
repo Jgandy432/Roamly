@@ -293,7 +293,9 @@ INSTRUCTIONS:
 - If rental car is needed by majority, include it in the plan
 - Prioritize must-haves and avoid deal breakers from all members
 
-Generate a COMPLETE trip plan with real place names, realistic prices, practical timing. Include 3 lodging options, flights for each member, a full day-by-day itinerary, at least 8 restaurants, and 5 pro tips.`;
+Generate a COMPLETE trip plan with real place names, realistic prices, practical timing. Include 3 lodging options, flights for each member, a full day-by-day itinerary, at least 8 restaurants, and 5 pro tips.
+
+IMPORTANT DATE FORMAT: All dates must be formatted as "Month Day Year" with no commas. Examples: "January 15 2026", "March 3 2026". The recommended_dates field should use "YYYY-MM-DD to YYYY-MM-DD" format. Each itinerary day's date field must use "Month Day Year" format with no commas.`;
 
     try {
       setGenProgress('Finding best lodging options...');
