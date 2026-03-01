@@ -17,7 +17,6 @@ import { ChevronLeft, ChevronRight, Check } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
-import { AIRPORTS } from '@/constants/data';
 import { UserPreferences } from '@/types/trip';
 import BottomTabBar from '@/components/BottomTabBar';
 
@@ -68,7 +67,6 @@ export default function PreferencesScreen() {
   const [calYear, setCalYear] = useState<number>(new Date().getFullYear());
 
   const [flightAirport, setFlightAirport] = useState<string>(existing?.flightAirport ?? '');
-  const [showAirportPicker, setShowAirportPicker] = useState<boolean>(false);
   const [flightNonstop, setFlightNonstop] = useState<string>(existing?.flightNonstop ?? '');
   const [flightDepartTime, setFlightDepartTime] = useState<string>(existing?.flightDepartTime ?? '');
   const [flightBudget, setFlightBudget] = useState<string>(existing?.flightBudget ? String(existing.flightBudget) : '');
@@ -309,31 +307,14 @@ export default function PreferencesScreen() {
       case 1:
         return (
           <View>
-            <Text style={styles.stepQuestion}>What airport are you flying from?</Text>
-            <TouchableOpacity
-              style={styles.pickerBtn}
-              onPress={() => setShowAirportPicker(!showAirportPicker)}
-            >
-              <Text style={flightAirport ? styles.pickerValueText : styles.pickerPlaceholder}>
-                {flightAirport || 'Select airport'}
-              </Text>
-              <ChevronRight size={16} color={Colors.textMuted} style={{ transform: [{ rotate: showAirportPicker ? '90deg' : '0deg' }] }} />
-            </TouchableOpacity>
-            {showAirportPicker && (
-              <View style={styles.pickerDropdown}>
-                <ScrollView style={styles.pickerScroll} nestedScrollEnabled>
-                  {AIRPORTS.map((a) => (
-                    <TouchableOpacity
-                      key={a}
-                      style={[styles.pickerOption, flightAirport === a && styles.pickerOptionActive]}
-                      onPress={() => { setFlightAirport(a); setShowAirportPicker(false); }}
-                    >
-                      <Text style={[styles.pickerOptionText, flightAirport === a && styles.pickerOptionTextActive]}>{a}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
+            <Text style={styles.stepQuestion}>What city are you departing from?</Text>
+            <TextInput
+              style={styles.textInput}
+              value={flightAirport}
+              onChangeText={setFlightAirport}
+              placeholder="e.g. Los Angeles, Chicago, Miami..."
+              placeholderTextColor={Colors.textDark}
+            />
 
             <Text style={[styles.stepQuestion, { marginTop: 28 }]}>Do you prefer nonstop flights?</Text>
             {renderTappableCards(NONSTOP_OPTIONS, flightNonstop, (v) => selectSingle(v, setFlightNonstop))}
