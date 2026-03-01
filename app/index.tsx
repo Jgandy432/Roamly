@@ -64,8 +64,7 @@ export default function WelcomeScreen() {
 
           <Animated.View style={[styles.bottomArea, { opacity: bottomFade, transform: [{ translateY: bottomSlide }] }]}>
             <Text style={styles.legal}>
-              By continuing you agree to our <Text style={styles.legalLink}>Terms of Service</Text> and <Text style={styles.legalLink}>Privacy Policy</Text>.
-            </Text>
+              {"By continuing you agree to our "}<Text style={styles.legalLink}>Terms of Service</Text>{" and "}<Text style={styles.legalLink}>Privacy Policy</Text>{"."}            </Text>
             <TouchableOpacity
               style={styles.primaryBtn}
               activeOpacity={0.85}
