@@ -8,7 +8,6 @@ import {
   Animated,
   KeyboardAvoidingView,
   Platform,
-  Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
