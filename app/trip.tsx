@@ -15,7 +15,6 @@ import { ChevronLeft, Copy, Check, Sparkles, UserPlus } from 'lucide-react-nativ
 import * as Haptics from 'expo-haptics';
 import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
-import { formatDisplayDate } from '@/utils/helpers';
 import PlanView from '@/components/PlanView';
 import BottomTabBar from '@/components/BottomTabBar';
 
@@ -121,7 +120,6 @@ export default function TripScreen() {
                 <Text style={styles.tripName}>{activeTrip.name}</Text>
                 <Text style={styles.tripMeta}>
                   {activeTrip.destination}
-                  {activeTrip.dateStart ? ` · ${formatDisplayDate(activeTrip.dateStart)} to ${formatDisplayDate(activeTrip.dateEnd || '')}` : ''}
                 </Text>
               </View>
               <View style={[

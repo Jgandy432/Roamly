@@ -5,7 +5,7 @@ export function generateFallbackPlan(trip: Trip): TripPlan {
   return {
     summary: {
       destination: dest,
-      recommended_dates: trip.dateStart ? `${trip.dateStart} to ${trip.dateEnd}` : 'Nov 14-18, 2026',
+      recommended_dates: 'Nov 14-18, 2026',
       total_nights: 4,
       group_size: trip.members.length,
       compatibility_score: 87,
@@ -18,7 +18,7 @@ export function generateFallbackPlan(trip: Trip): TripPlan {
     ],
     flights: trip.members.filter((m) => m.preferencesSubmitted).map((m) => ({
       member_name: m.name,
-      airport: m.preferences?.airport?.split(' - ')[0] || 'EWR',
+      airport: m.preferences?.flightAirport?.split(' - ')[0] || 'EWR',
       airline: 'JetBlue',
       departure_time: '7:30 AM',
       type: '1 Stop (MIA)',

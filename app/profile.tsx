@@ -8,11 +8,10 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft, LogOut } from 'lucide-react-native';
+import { LogOut } from 'lucide-react-native';
 import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
 import { SAMPLE_TRIPS } from '@/constants/data';
-import { formatDisplayDate } from '@/utils/helpers';
 import BottomTabBar from '@/components/BottomTabBar';
 
 const VISIBILITY_OPTIONS = ['public', 'friends', 'private'] as const;
@@ -28,7 +27,7 @@ export default function ProfileScreen() {
       id: t.id,
       name: t.name,
       destination: t.destination,
-      dates: t.dateStart ? `${formatDisplayDate(t.dateStart)} to ${formatDisplayDate(t.dateEnd || '')}` : 'Dates TBD',
+      dates: 'Dates TBD',
       members: t.members.length,
       status: t.status,
     })),

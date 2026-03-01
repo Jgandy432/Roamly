@@ -60,6 +60,36 @@ const tripPlanSchema = z.object({
   pro_tips: z.array(z.string()),
 });
 
+function formatMemberPrefs(m: TripMember): string {
+  const p = m.preferences;
+  if (!p) return `- ${m.name}: No preferences submitted`;
+  const lines: string[] = [`- ${m.name}:`];
+  if (p.availableDates?.length) lines.push(`  Available dates: ${p.availableDates.join(', ')}`);
+  if (p.flightAirport) lines.push(`  Airport: ${p.flightAirport}`);
+  if (p.flightNonstop) lines.push(`  Nonstop preference: ${p.flightNonstop}`);
+  if (p.flightDepartTime) lines.push(`  Departure time: ${p.flightDepartTime}`);
+  if (p.flightBudget) lines.push(`  Flight budget: $${p.flightBudget}`);
+  if (p.accommodationType) lines.push(`  Accommodation: ${p.accommodationType}`);
+  if (p.accommodationNightlyBudget) lines.push(`  Nightly budget: $${p.accommodationNightlyBudget}/person`);
+  if (p.accommodationMustHaves?.length) lines.push(`  Accommodation must-haves: ${p.accommodationMustHaves.join(', ')}`);
+  if (p.needsRentalCar) lines.push(`  Rental car: ${p.needsRentalCar}`);
+  if (p.isDriver) lines.push(`  Is driver: ${p.isDriver}`);
+  if (p.vehiclePreference) lines.push(`  Vehicle preference: ${p.vehiclePreference}`);
+  if (p.activityInterests?.length) lines.push(`  Activity interests: ${p.activityInterests.join(', ')}`);
+  if (p.activityDailyBudget) lines.push(`  Daily activity budget: $${p.activityDailyBudget}`);
+  if (p.activityMustDo) lines.push(`  Must-do: ${p.activityMustDo}`);
+  if (p.activityWontDo) lines.push(`  Won't do: ${p.activityWontDo}`);
+  if (p.diningStyle) lines.push(`  Dining style: ${p.diningStyle}`);
+  if (p.dietaryRestrictions?.length) lines.push(`  Dietary restrictions: ${p.dietaryRestrictions.join(', ')}`);
+  if (p.foodDailyBudget) lines.push(`  Daily food budget: $${p.foodDailyBudget}/person`);
+  if (p.foodMustHaves?.length) lines.push(`  Food priorities: ${p.foodMustHaves.join(', ')}`);
+  if (p.totalBudget) lines.push(`  Total trip budget: $${p.totalBudget}/person`);
+  if (p.budgetFlexibility) lines.push(`  Budget flexibility: ${p.budgetFlexibility}`);
+  if (p.mustHave) lines.push(`  Must have: ${p.mustHave}`);
+  if (p.dealBreaker) lines.push(`  Deal breaker: ${p.dealBreaker}`);
+  return lines.join('\n');
+}
+
 export const [TripProvider, useTrips] = createContextHook(() => {
   const queryClient = useQueryClient();
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
@@ -193,15 +223,40 @@ export const [TripProvider, useTrips] = createContextHook(() => {
 
   const addDemoMembers = useCallback(() => {
     if (!activeTrip) return;
+    const demoPrefs: UserPreferences = {
+      availableDates: ['2026-11-14', '2026-11-15', '2026-11-16', '2026-11-17', '2026-11-18'],
+      flightAirport: "ORD - Chicago O'Hare",
+      flightNonstop: 'Layovers ok',
+      flightDepartTime: 'Morning',
+      flightBudget: 500,
+      accommodationType: 'Airbnb',
+      accommodationNightlyBudget: 100,
+      accommodationMustHaves: ['Pool', 'Kitchen'],
+      needsRentalCar: 'Maybe',
+      isDriver: 'Yes',
+      vehiclePreference: 'Standard',
+      activityInterests: ['Food tours', 'Culture', 'Nightlife'],
+      activityDailyBudget: 80,
+      activityMustDo: 'Street food tour',
+      activityWontDo: '',
+      diningStyle: 'Mid-range',
+      dietaryRestrictions: ['None'],
+      foodDailyBudget: 60,
+      foodMustHaves: ['Local spots', 'Food markets'],
+      totalBudget: 2000,
+      budgetFlexibility: 'A little flexible',
+      mustHave: 'At least one beach day',
+      dealBreaker: '',
+    };
     const demoMembers: TripMember[] = [
       { id: generateId(), name: 'Sarah K.', email: 'sarah@demo.com', avatar: 'S', role: 'member', preferencesSubmitted: true,
-        preferences: { budgetMin: 800, budgetMax: 1500, airport: "ORD - Chicago O'Hare", dateStart: '2026-11-15', dateEnd: '2026-11-18', interests: ['food', 'beaches', 'shopping', 'wellness'] } },
+        preferences: { ...demoPrefs, flightAirport: "ORD - Chicago O'Hare", activityInterests: ['Relaxation', 'Shopping', 'Wellness'], totalBudget: 1500, diningStyle: 'Casual' } },
       { id: generateId(), name: 'Mike R.', email: 'mike@demo.com', avatar: 'M', role: 'member', preferencesSubmitted: true,
-        preferences: { budgetMin: 1000, budgetMax: 2000, airport: 'LAX - Los Angeles', dateStart: '2026-11-14', dateEnd: '2026-11-18', interests: ['nightlife', 'adventure', 'food', 'beaches'] } },
+        preferences: { ...demoPrefs, flightAirport: 'LAX - Los Angeles', activityInterests: ['Nightlife', 'Adventure', 'Food tours'], totalBudget: 2500, diningStyle: 'Mix' } },
       { id: generateId(), name: 'Dan P.', email: 'dan@demo.com', avatar: 'D', role: 'member', preferencesSubmitted: true,
-        preferences: { budgetMin: 600, budgetMax: 1200, airport: 'EWR - Newark', dateStart: '2026-11-14', dateEnd: '2026-11-19', interests: ['hiking', 'food', 'photography', 'history'] } },
+        preferences: { ...demoPrefs, flightAirport: 'EWR - Newark', activityInterests: ['Nature', 'Culture', 'Food tours'], totalBudget: 1200, budgetFlexibility: 'Strict' } },
       { id: generateId(), name: 'Jess T.', email: 'jess@demo.com', avatar: 'J', role: 'member', preferencesSubmitted: true,
-        preferences: { budgetMin: 900, budgetMax: 1800, airport: 'BOS - Boston Logan', dateStart: '2026-11-13', dateEnd: '2026-11-18', interests: ['beaches', 'nightlife', 'wellness', 'wine'] } },
+        preferences: { ...demoPrefs, flightAirport: 'BOS - Boston Logan', activityInterests: ['Relaxation', 'Nightlife', 'Wellness'], totalBudget: 1800 } },
     ];
     const updatedTrip: Trip = { ...activeTrip, members: [...activeTrip.members, ...demoMembers] };
     const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
@@ -216,34 +271,27 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     setActiveTripPlan(null);
 
     const members = activeTrip.members.filter((m) => m.preferencesSubmitted);
-    const memberSummary = members.map((m) => ({
-      name: m.name,
-      budget: `$${m.preferences?.budgetMin}-$${m.preferences?.budgetMax}`,
-      airport: m.preferences?.airport ?? 'Unknown',
-      dates: `${m.preferences?.dateStart} to ${m.preferences?.dateEnd}`,
-      interests: m.preferences?.interests?.join(', ') ?? 'None',
-    }));
+    const memberDetails = members.map((m) => formatMemberPrefs(m)).join('\n\n');
 
-    const tripPrefs = [
-      activeTrip.budget ? `BUDGET PER PERSON: ${activeTrip.budget}` : '',
-      activeTrip.tripTypes?.length ? `TRIP TYPES: ${activeTrip.tripTypes.join(', ')}${activeTrip.tripTypeOther ? `, ${activeTrip.tripTypeOther}` : ''}` : '',
-      activeTrip.vibe ? `VIBE: ${activeTrip.vibe}` : '',
-      activeTrip.accommodation ? `ACCOMMODATION PREFERENCE: ${activeTrip.accommodation}` : '',
-      activeTrip.dietaryNeeds?.length ? `DIETARY NEEDS: ${activeTrip.dietaryNeeds.join(', ')}${activeTrip.dietaryOther ? `, ${activeTrip.dietaryOther}` : ''}` : '',
-      activeTrip.mustHave ? `MUST HAVE: ${activeTrip.mustHave}` : '',
-      activeTrip.dealBreaker ? `DEAL BREAKERS: ${activeTrip.dealBreaker}` : '',
-    ].filter(Boolean).join('\n');
-
-    const prompt = `You are Roamly, an AI group trip planner. Generate a complete trip plan.
+    const prompt = `You are Roamly, an AI group trip planner. Generate a complete trip plan based on individual member preferences.
 
 TRIP: "${activeTrip.name}"
 DESTINATION: ${activeTrip.destination || "Recommend based on group preferences"}
-DATE WINDOW: ${activeTrip.dateStart || "Flexible"} to ${activeTrip.dateEnd || "Flexible"}
-CONSTRAINTS: ${activeTrip.constraints || "None"}
-${tripPrefs ? `\n${tripPrefs}` : ''}
+GROUP SIZE: ${activeTrip.groupSize}
 
-GROUP:
-${memberSummary.map((m) => `- ${m.name}: Budget ${m.budget}, Airport: ${m.airport}, Available: ${m.dates}, Interests: ${m.interests}`).join('\n')}
+INDIVIDUAL MEMBER PREFERENCES:
+${memberDetails}
+
+INSTRUCTIONS:
+- Find overlapping available dates across all members
+- Balance everyone's budgets (use the lowest total budget as a baseline)
+- Choose accommodation that satisfies the most must-haves
+- Plan activities that cover the most popular interests across the group
+- Account for dietary restrictions when recommending restaurants
+- Suggest flights from each member's home airport, respecting their nonstop/timing preferences
+- Stay within individual flight budgets
+- If rental car is needed by majority, include it in the plan
+- Prioritize must-haves and avoid deal breakers from all members
 
 Generate a COMPLETE trip plan with real place names, realistic prices, practical timing. Include 3 lodging options, flights for each member, a full day-by-day itinerary, at least 8 restaurants, and 5 pro tips.`;
 

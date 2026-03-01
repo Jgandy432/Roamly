@@ -1,10 +1,27 @@
 export interface UserPreferences {
-  budgetMin: number;
-  budgetMax: number;
-  airport: string;
-  dateStart: string;
-  dateEnd: string;
-  interests: string[];
+  availableDates: string[];
+  flightAirport: string;
+  flightNonstop: string;
+  flightDepartTime: string;
+  flightBudget: number;
+  accommodationType: string;
+  accommodationNightlyBudget: number;
+  accommodationMustHaves: string[];
+  needsRentalCar: string;
+  isDriver: string;
+  vehiclePreference: string;
+  activityInterests: string[];
+  activityDailyBudget: number;
+  activityMustDo: string;
+  activityWontDo: string;
+  diningStyle: string;
+  dietaryRestrictions: string[];
+  foodDailyBudget: number;
+  foodMustHaves: string[];
+  totalBudget: number;
+  budgetFlexibility: string;
+  mustHave: string;
+  dealBreaker: string;
 }
 
 export interface TripMember {
@@ -94,18 +111,7 @@ export interface TripData {
   name: string;
   destination: string;
   groupSize: number;
-  dateStart: string;
-  dateEnd: string;
   constraints: string;
-  budget?: number;
-  tripTypes?: string[];
-  tripTypeOther?: string;
-  vibe?: string;
-  accommodation?: string;
-  dietaryNeeds?: string[];
-  dietaryOther?: string;
-  mustHave?: string;
-  dealBreaker?: string;
 }
 
 export interface Trip extends TripData {
