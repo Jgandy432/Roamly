@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
 import { BlurView } from 'expo-blur';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -14,6 +14,12 @@ export default function WelcomeScreen() {
   const { currentUser, isLoading } = useTrips();
   const cardAnim = useRef(new Animated.Value(0)).current;
   const cardSlide = useRef(new Animated.Value(40)).current;
+
+  const player = useVideoPlayer(require('@/assets/videos/hero.mp4'), (p) => {
+    p.loop = true;
+    p.muted = true;
+    p.play();
+  });
 
   useEffect(() => {
     if (currentUser && !isLoading) { router.replace('/dashboard'); return; }
@@ -29,13 +35,11 @@ export default function WelcomeScreen() {
   return (
     <View style={styles.root}>
       {Platform.OS !== 'web' ? (
-        <Video
-          source={require('@/assets/videos/hero.mp4')}
+        <VideoView
+          player={player}
           style={styles.video}
-          resizeMode={ResizeMode.COVER}
-          isLooping
-          isMuted
-          shouldPlay
+          contentFit="cover"
+          nativeControls={false}
         />
       ) : (
         <View style={[styles.video, { backgroundColor: '#222' }]} />
