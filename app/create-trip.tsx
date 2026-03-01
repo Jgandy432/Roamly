@@ -17,6 +17,8 @@ import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
 import { POPULAR_DESTINATIONS } from '@/constants/data';
 import Slider from '@/components/Slider';
+import { formatDateFromObj } from '@/utils/helpers';
+import BottomTabBar from '@/components/BottomTabBar';
 
 type Step =
   | 'destination'
@@ -105,7 +107,7 @@ function formatBudgetLabel(val: number): string {
   return '$' + val.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-function formatDateDisplay(date: Date): string {
+function formatDateStorage(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   const y = date.getFullYear();
@@ -196,8 +198,8 @@ export default function CreateTripScreen() {
         name: tripName,
         destination: destText,
         groupSize: travelers,
-        dateStart: dateStart ? formatDateDisplay(dateStart) : '',
-        dateEnd: dateEnd ? formatDateDisplay(dateEnd) : '',
+        dateStart: dateStart ? formatDateStorage(dateStart) : '',
+        dateEnd: dateEnd ? formatDateStorage(dateEnd) : '',
         constraints: '',
         budget,
         tripTypes,
@@ -443,14 +445,14 @@ export default function CreateTripScreen() {
               <View style={styles.dateDisplayItem}>
                 <Text style={styles.dateDisplayLabel}>Start</Text>
                 <Text style={styles.dateDisplayValue}>
-                  {dateStart ? formatDateDisplay(dateStart) : '—'}
+                  {dateStart ? formatDateFromObj(dateStart) : '—'}
                 </Text>
               </View>
               <View style={styles.dateDisplayDivider} />
               <View style={styles.dateDisplayItem}>
                 <Text style={styles.dateDisplayLabel}>End</Text>
                 <Text style={styles.dateDisplayValue}>
-                  {dateEnd ? formatDateDisplay(dateEnd) : '—'}
+                  {dateEnd ? formatDateFromObj(dateEnd) : '—'}
                 </Text>
               </View>
             </View>
@@ -680,6 +682,7 @@ export default function CreateTripScreen() {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      <BottomTabBar />
     </View>
   );
 }

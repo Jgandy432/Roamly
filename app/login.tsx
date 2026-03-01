@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ChevronLeft } from 'lucide-react-native';
 import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
+import BottomTabBar from '@/components/BottomTabBar';
 
 type Step = 'email' | 'name';
 
@@ -149,6 +150,7 @@ export default function LoginScreen() {
           </View>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      <BottomTabBar />
     </View>
   );
 }

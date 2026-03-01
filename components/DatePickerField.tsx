@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
+import { formatDisplayDate } from '@/utils/helpers';
 
 interface DatePickerFieldProps {
   value: string;
@@ -47,13 +48,8 @@ function parseDateString(dateStr: string): Date | null {
   return null;
 }
 
-function formatDateDisplay(dateStr: string): string {
-  const date = parseDateString(dateStr);
-  if (!date) return '';
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  const y = date.getFullYear();
-  return `${m}/${d}/${y}`;
+function formatDateDisplayLocal(dateStr: string): string {
+  return formatDisplayDate(dateStr);
 }
 
 function toStorageFormat(date: Date): string {
@@ -83,7 +79,7 @@ export default function DatePickerField({ value, onChangeDate, placeholder = 'MM
   const [viewMonth, setViewMonth] = useState<number>(initialDate.getMonth());
   const [selectedDate, setSelectedDate] = useState<Date | null>(parseDateString(value));
 
-  const displayValue = useMemo(() => formatDateDisplay(value), [value]);
+  const displayValue = useMemo(() => formatDateDisplayLocal(value), [value]);
 
   const openPicker = useCallback(() => {
     const parsed = parseDateString(value);

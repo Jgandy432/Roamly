@@ -18,6 +18,7 @@ import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
 import { INTEREST_OPTIONS, AIRPORTS } from '@/constants/data';
 import DatePickerField from '@/components/DatePickerField';
+import BottomTabBar from '@/components/BottomTabBar';
 
 export default function PreferencesScreen() {
   const router = useRouter();
@@ -189,6 +190,7 @@ export default function PreferencesScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+      <BottomTabBar />
     </View>
   );
 }

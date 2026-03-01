@@ -8,6 +8,8 @@ import {
   TextInput,
   Animated,
   Alert,
+  BackHandler,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,6 +32,13 @@ export default function DashboardScreen() {
     }
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
   }, [currentUser]);
+
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => true);
+      return () => backHandler.remove();
+    }
+  }, []);
 
   const handleOpenTrip = (trip: Trip) => {
     setActiveTrip(trip);

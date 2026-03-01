@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, Send, Clock } from 'lucide-react-native';
 import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
+import { formatDisplayDate } from '@/utils/helpers';
 import { Trip } from '@/types/trip';
 import BottomTabBar from '@/components/BottomTabBar';
 
@@ -69,7 +70,7 @@ function TripCard({ trip, onPress }: { trip: Trip; onPress: () => void }) {
         {trip.dateStart && (
           <View style={styles.datesRow}>
             <Clock size={11} color={Colors.textMuted} />
-            <Text style={styles.datesText}>{trip.dateStart}{trip.dateEnd ? ` → ${trip.dateEnd}` : ''}</Text>
+            <Text style={styles.datesText}>{formatDisplayDate(trip.dateStart || '')}{trip.dateEnd ? ` → ${formatDisplayDate(trip.dateEnd)}` : ''}</Text>
           </View>
         )}
       </TouchableOpacity>
