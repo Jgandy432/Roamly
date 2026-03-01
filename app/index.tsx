@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Dimensions, Image, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
 import { BlurView } from 'expo-blur';
-import { VideoView, useVideoPlayer } from 'expo-video';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: W, height: H } = Dimensions.get('window');
 
@@ -14,15 +14,18 @@ export default function WelcomeScreen() {
   const { currentUser, isLoading } = useTrips();
   const cardAnim = useRef(new Animated.Value(0)).current;
   const cardSlide = useRef(new Animated.Value(40)).current;
-
-  const player = useVideoPlayer(require('@/assets/videos/hero.mp4'), (p) => {
-    p.loop = true;
-    p.muted = true;
-    p.play();
-  });
+  const bgPulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (currentUser && !isLoading) { router.replace('/dashboard'); return; }
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(bgPulse, { toValue: 1, duration: 4000, useNativeDriver: true }),
+        Animated.timing(bgPulse, { toValue: 0, duration: 4000, useNativeDriver: true }),
+      ])
+    ).start();
+
     const timer = setTimeout(() => {
       Animated.parallel([
         Animated.timing(cardAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
@@ -32,18 +35,21 @@ export default function WelcomeScreen() {
     return () => clearTimeout(timer);
   }, [currentUser, isLoading]);
 
+  const bgScale = bgPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] });
+
   return (
     <View style={styles.root}>
-      {Platform.OS !== 'web' ? (
-        <VideoView
-          player={player}
-          style={styles.video}
-          contentFit="cover"
-          nativeControls={false}
+      <Animated.View style={[styles.bgWrap, { transform: [{ scale: bgScale }] }]}>
+        <LinearGradient
+          colors={['#0f2027', '#203a43', '#2c5364']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.bgGradient}
         />
-      ) : (
-        <View style={[styles.video, { backgroundColor: '#222' }]} />
-      )}
+        <View style={styles.orb1} />
+        <View style={styles.orb2} />
+        <View style={styles.orb3} />
+      </Animated.View>
       <View style={styles.scrim} />
       <SafeAreaView style={styles.flex}>
         <View style={styles.layout}>
@@ -72,10 +78,14 @@ export default function WelcomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#111' },
+  root: { flex: 1, backgroundColor: '#0f2027' },
   flex: { flex: 1 },
-  video: { position: 'absolute', top: 0, left: 0, width: W, height: H },
-  scrim: { position: 'absolute', top: 0, left: 0, width: W, height: H, backgroundColor: 'rgba(0,0,0,0.35)' },
+  bgWrap: { position: 'absolute', top: -40, left: -40, width: W + 80, height: H + 80 },
+  bgGradient: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
+  orb1: { position: 'absolute', top: H * 0.12, left: W * 0.1, width: 220, height: 220, borderRadius: 110, backgroundColor: 'rgba(255,140,50,0.18)' },
+  orb2: { position: 'absolute', top: H * 0.45, right: -40, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(37,99,235,0.15)' },
+  orb3: { position: 'absolute', bottom: H * 0.1, left: -60, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(16,185,129,0.12)' },
+  scrim: { position: 'absolute', top: 0, left: 0, width: W, height: H, backgroundColor: 'rgba(0,0,0,0.2)' },
   layout: { flex: 1, justifyContent: 'space-between', alignItems: 'center', paddingTop: 32, paddingBottom: 32, paddingHorizontal: 24 },
   logo: { width: 160, height: 52, resizeMode: 'contain', tintColor: '#FFFFFF' },
   cardWrap: { width: '100%', borderRadius: 28, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.3, shadowRadius: 40, elevation: 20 },
