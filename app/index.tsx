@@ -53,7 +53,7 @@ export default function WelcomeScreen() {
       <View style={styles.scrim} />
       <SafeAreaView style={styles.flex}>
         <View style={styles.layout}>
-          <Animated.View style={{ opacity: cardAnim }}>
+          <Animated.View style={[styles.logoWrap, { opacity: cardAnim }]}>
             <Image source={require('@/assets/images/roamly-logo.png')} style={styles.logo} />
           </Animated.View>
           <Animated.View style={[styles.cardWrap, { opacity: cardAnim, transform: [{ translateY: cardSlide }] }]}>
@@ -86,8 +86,9 @@ const styles = StyleSheet.create({
   orb2: { position: 'absolute', top: H * 0.45, right: -40, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(37,99,235,0.15)' },
   orb3: { position: 'absolute', bottom: H * 0.1, left: -60, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(16,185,129,0.12)' },
   scrim: { position: 'absolute', top: 0, left: 0, width: W, height: H, backgroundColor: 'rgba(0,0,0,0.2)' },
-  layout: { flex: 1, justifyContent: 'space-between', alignItems: 'center', paddingTop: 32, paddingBottom: 32, paddingHorizontal: 24 },
-  logo: { width: 160, height: 52, resizeMode: 'contain' },
+  layout: { flex: 1, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 24, paddingHorizontal: 24 },
+  logoWrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', paddingBottom: H * 0.25 },
+  logo: { width: 320, height: 104, resizeMode: 'contain' },
   cardWrap: { width: '100%', borderRadius: 28, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.3, shadowRadius: 40, elevation: 20 },
   card: { borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' },
   cardInner: { padding: 28, backgroundColor: 'rgba(255,255,255,0.15)' },
