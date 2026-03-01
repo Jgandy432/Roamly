@@ -59,8 +59,7 @@ export default function WelcomeScreen() {
         <View style={styles.content}>
           <Animated.View style={[styles.brandArea, { opacity: fadeIn, transform: [{ translateY: slideUp }] }]}>
             <Image source={require('@/assets/images/roamly-logo.png')} style={styles.logo} />
-            <Text style={styles.headline}>Less talk,{'\n'}more travel.</Text>
-            <Text style={styles.subtitle}>Plan group trips in minutes.{'\n'}Everyone's preferences, one perfect plan.</Text>
+            <Text style={styles.headline}>Less talk, more travel.</Text>
           </Animated.View>
 
           <Animated.View style={[styles.bottomArea, { opacity: bottomFade, transform: [{ translateY: bottomSlide }] }]}>
