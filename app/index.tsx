@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
   orb3: { position: 'absolute', bottom: H * 0.1, left: -60, width: 260, height: 260, borderRadius: 130, backgroundColor: 'rgba(16,185,129,0.12)' },
   scrim: { position: 'absolute', top: 0, left: 0, width: W, height: H, backgroundColor: 'rgba(0,0,0,0.2)' },
   layout: { flex: 1, justifyContent: 'space-between', alignItems: 'center', paddingTop: 32, paddingBottom: 32, paddingHorizontal: 24 },
-  logo: { width: 160, height: 52, resizeMode: 'contain', tintColor: '#FFFFFF' },
+  logo: { width: 160, height: 52, resizeMode: 'contain' },
   cardWrap: { width: '100%', borderRadius: 28, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 20 }, shadowOpacity: 0.3, shadowRadius: 40, elevation: 20 },
   card: { borderRadius: 28, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.4)' },
   cardInner: { padding: 28, backgroundColor: 'rgba(255,255,255,0.15)' },
