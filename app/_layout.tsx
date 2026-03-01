@@ -23,6 +23,8 @@ function RootLayoutNav() {
       <Stack.Screen name="signup" />
       <Stack.Screen name="login" />
       <Stack.Screen name="dashboard" />
+      <Stack.Screen name="explore" />
+      <Stack.Screen name="my-trips" />
       <Stack.Screen name="create-trip" />
       <Stack.Screen name="trip" />
       <Stack.Screen name="preferences" />

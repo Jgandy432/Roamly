@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Plus, LogOut, User } from 'lucide-react-native';
 import { useTrips } from '@/context/TripContext';
+import BottomTabBar from '@/components/BottomTabBar';
 import { Colors } from '@/constants/colors';
 import { Trip } from '@/types/trip';
 
@@ -165,6 +166,7 @@ export default function DashboardScreen() {
           </ScrollView>
         </Animated.View>
       </SafeAreaView>
+      <BottomTabBar />
     </View>
   );
 }
