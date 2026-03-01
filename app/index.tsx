@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
   content: { flex: 1, justifyContent: 'space-between', paddingHorizontal: 28 },
   brandArea: { alignItems: 'center', paddingTop: H * 0.1 },
   logo: { width: W * 0.9, height: 200, resizeMode: 'contain' as const, marginBottom: 32 },
-  headline: { fontSize: 38, fontWeight: '800' as const, color: '#FFFFFF', textAlign: 'center' as const, letterSpacing: -0.5, lineHeight: 46 },
+  headline: { fontSize: 26, fontWeight: '800' as const, color: '#FFFFFF', textAlign: 'center' as const, letterSpacing: -0.5, lineHeight: 34 },
   subtitle: { fontSize: 16, color: 'rgba(255,255,255,0.7)', textAlign: 'center' as const, lineHeight: 24, marginTop: 14 },
   bottomArea: { paddingBottom: 16 },
   legal: { fontSize: 12, color: 'rgba(255,255,255,0.45)', textAlign: 'center' as const, lineHeight: 18, marginBottom: 20, paddingHorizontal: 12 },
