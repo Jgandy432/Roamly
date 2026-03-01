@@ -80,8 +80,6 @@ const QUESTIONS: Question[] = [
   { id: 'dealBreaker', section: 'Overall Budget', title: 'One thing that would ruin this trip?', type: 'multiline', placeholder: 'e.g. no super touristy spots...' },
 ];
 
-const TOTAL_QUESTIONS = QUESTIONS.length;
-
 function formatDateKey(year: number, month: number, day: number): string {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
@@ -125,6 +123,15 @@ export default function PreferencesScreen() {
   const [mustHave, setMustHave] = useState<string>(existing?.mustHave ?? '');
   const [dealBreaker, setDealBreaker] = useState<string>(existing?.dealBreaker ?? '');
 
+  const activeQuestions = useMemo(() => {
+    if (needsRentalCar === 'No') {
+      return QUESTIONS.filter((q) => q.id !== 'isDriver' && q.id !== 'vehiclePreference');
+    }
+    return QUESTIONS;
+  }, [needsRentalCar]);
+
+  const TOTAL_QUESTIONS = activeQuestions.length;
+
   const slideAnim = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const directionRef = useRef<'forward' | 'backward'>('forward');
@@ -146,8 +153,9 @@ export default function PreferencesScreen() {
     });
   }, [fadeAnim, slideAnim]);
 
-  const progress = (questionIndex + 1) / TOTAL_QUESTIONS;
-  const currentQuestion = QUESTIONS[questionIndex];
+  const safeIndex = Math.min(questionIndex, TOTAL_QUESTIONS - 1);
+  const progress = (safeIndex + 1) / TOTAL_QUESTIONS;
+  const currentQuestion = activeQuestions[safeIndex];
 
   const calendarDays = useMemo(() => {
     const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
@@ -251,9 +259,9 @@ export default function PreferencesScreen() {
   }, []);
 
   const handleNext = useCallback(() => {
-    if (questionIndex < TOTAL_QUESTIONS - 1) {
+    if (safeIndex < TOTAL_QUESTIONS - 1) {
       animateTransition('forward');
-      setTimeout(() => setQuestionIndex((i) => i + 1), 120);
+      setTimeout(() => setQuestionIndex((i) => Math.min(i + 1, TOTAL_QUESTIONS - 1)), 120);
     } else {
       const prefs: UserPreferences = {
         availableDates,
@@ -285,7 +293,7 @@ export default function PreferencesScreen() {
       Alert.alert('Saved!', 'Your preferences have been submitted.');
       router.back();
     }
-  }, [questionIndex, animateTransition, availableDates, flightAirport, flightNonstop, flightDepartTime, flightBudget, accommodationType, accommodationNightlyBudget, accommodationMustHaves, needsRentalCar, isDriver, vehiclePreference, activityInterests, activityDailyBudget, activityMustDo, activityWontDo, diningStyle, dietaryRestrictions, foodDailyBudget, foodMustHaves, totalBudget, budgetFlexibility, mustHave, dealBreaker, submitPreferences, router]);
+  }, [safeIndex, TOTAL_QUESTIONS, animateTransition, availableDates, flightAirport, flightNonstop, flightDepartTime, flightBudget, accommodationType, accommodationNightlyBudget, accommodationMustHaves, needsRentalCar, isDriver, vehiclePreference, activityInterests, activityDailyBudget, activityMustDo, activityWontDo, diningStyle, dietaryRestrictions, foodDailyBudget, foodMustHaves, totalBudget, budgetFlexibility, mustHave, dealBreaker, submitPreferences, router]);
 
   const handleBack = useCallback(() => {
     if (questionIndex === 0) {
@@ -479,7 +487,7 @@ export default function PreferencesScreen() {
     }
   };
 
-  const isLastQuestion = questionIndex === TOTAL_QUESTIONS - 1;
+  const isLastQuestion = safeIndex === TOTAL_QUESTIONS - 1;
 
   return (
     <View style={styles.root}>
@@ -495,7 +503,7 @@ export default function PreferencesScreen() {
               </View>
             </View>
             <View style={styles.stepCounter}>
-              <Text style={styles.stepCounterText}>{questionIndex + 1}/{TOTAL_QUESTIONS}</Text>
+              <Text style={styles.stepCounterText}>{safeIndex + 1}/{TOTAL_QUESTIONS}</Text>
             </View>
           </View>
 
