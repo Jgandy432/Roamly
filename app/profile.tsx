@@ -8,16 +8,17 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, LogOut } from 'lucide-react-native';
 import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
 import { SAMPLE_TRIPS } from '@/constants/data';
+import BottomTabBar from '@/components/BottomTabBar';
 
 const VISIBILITY_OPTIONS = ['public', 'friends', 'private'] as const;
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { currentUser, trips } = useTrips();
+  const { currentUser, trips, logout } = useTrips();
   const [visibility, setVisibility] = useState<string>('friends');
 
   const allTrips = [
@@ -41,10 +42,9 @@ export default function ProfileScreen() {
   return (
     <View style={styles.root}>
       <SafeAreaView style={styles.flex}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <ChevronLeft size={20} color={Colors.textMuted} />
-          <Text style={styles.backText}>Dashboard</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRow}>
+          <Text style={styles.headerTitle}>Profile</Text>
+        </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.profileCard}>
@@ -102,23 +102,36 @@ export default function ProfileScreen() {
               <Text style={styles.historyMembers}>{trip.members} travelers</Text>
             </View>
           ))}
+          <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.8}>
+            <LogOut size={18} color="#E53935" />
+            <Text style={styles.logoutText}>Log Out</Text>
+          </TouchableOpacity>
+
+          <View style={{ height: 120 }} />
         </ScrollView>
       </SafeAreaView>
+      <BottomTabBar />
     </View>
   );
+
+  function handleLogout() {
+    logout();
+    router.replace('/');
+  }
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.bg },
   flex: { flex: 1 },
-  backBtn: {
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
   },
-  backText: { fontSize: 14, color: Colors.textMuted },
+  headerTitle: { fontSize: 28, fontWeight: '800' as const, color: Colors.text, letterSpacing: -0.5 },
   scrollContent: { paddingHorizontal: 24, paddingBottom: 40 },
   profileCard: {
     backgroundColor: Colors.bgCard,
@@ -198,4 +211,17 @@ const styles = StyleSheet.create({
   historyName: { fontSize: 14, fontWeight: '600' as const, color: Colors.text },
   historyMeta: { fontSize: 12, color: Colors.textMuted, marginTop: 3 },
   historyMembers: { fontSize: 11, color: Colors.textDim },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 24,
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: '#FDECEA',
+    borderWidth: 1,
+    borderColor: '#F5C6CB',
+  },
+  logoutText: { fontSize: 15, fontWeight: '600' as const, color: '#E53935' },
 });

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
-import { Home, Compass, Plus, Map } from 'lucide-react-native';
+import { Home, Compass, Plus, Map, User } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 
 export default function BottomTabBar() {
@@ -15,7 +15,7 @@ export default function BottomTabBar() {
         <Plus size={26} color="#FFFFFF" strokeWidth={2.5} />
       </TouchableOpacity>
       <TabButton label="My Trips" icon={Map} active={pathname === '/my-trips'} onPress={() => router.replace('/my-trips')} />
-      <View style={styles.spacer} />
+      <TabButton label="Profile" icon={User} active={pathname === '/profile'} onPress={() => router.replace('/profile')} />
     </View>
   );
 }
@@ -58,5 +58,4 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     elevation: 8,
   },
-  spacer: { flex: 1 },
 });
