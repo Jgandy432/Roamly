@@ -244,16 +244,20 @@ function LodgingTab({ plan }: { plan: TripPlan }) {
 
 function formatFlightDate(text: string): string {
   if (!text) return text;
-  const datePattern = /\d{4}-\d{2}-\d{2}/g;
-  return text.replace(datePattern, (match) => formatDisplayDate(match));
+  const isoPattern = /\d{4}-\d{2}-\d{2}/g;
+  let result = text.replace(isoPattern, (match) => formatDisplayDate(match));
+  const slashPattern = /\d{1,2}\/\d{1,2}\/\d{4}/g;
+  result = result.replace(slashPattern, (match) => formatDisplayDate(match));
+  return result;
 }
 
 function FlightsTab({ plan }: { plan: TripPlan }) {
   return (
     <View>
       {plan.flights.map((f, i) => {
+        const formattedDeparture = formatFlightDate(f.departure_time ?? '');
         const formattedDetails = formatFlightDate(
-          `${f.airport} · ${f.airline} · ${f.departure_time} · ${f.type}`
+          `${f.airport} · ${f.airline} · ${formattedDeparture} · ${f.type}`
         );
         const formattedNotes = f.notes ? formatFlightDate(f.notes) : null;
 

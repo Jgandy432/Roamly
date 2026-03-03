@@ -74,7 +74,7 @@ export const POPULAR_DESTINATIONS: string[] = [
 ];
 
 export const SAMPLE_TRIPS: SampleTrip[] = [
-  { id: 't1', name: 'Cabo 2025', destination: 'Cabo San Lucas', dates: 'Nov 14-18', members: 6, status: 'completed' },
-  { id: 't2', name: 'Nashville Bach Party', destination: 'Nashville, TN', dates: 'Sep 5-8', members: 8, status: 'completed' },
-  { id: 't3', name: 'Ski Trip 2026', destination: 'Park City, UT', dates: 'Jan 15-19', members: 5, status: 'planning' },
+  { id: 't1', name: 'Cabo 2025', destination: 'Cabo San Lucas', dates: 'November 14 2025 - November 18 2025', members: 6, status: 'completed' },
+  { id: 't2', name: 'Nashville Bach Party', destination: 'Nashville, TN', dates: 'September 5 2025 - September 8 2025', members: 8, status: 'completed' },
+  { id: 't3', name: 'Ski Trip 2026', destination: 'Park City, UT', dates: 'January 15 2026 - January 19 2026', members: 5, status: 'planning' },
 ];
