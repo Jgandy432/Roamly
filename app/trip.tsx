@@ -8,6 +8,7 @@ import {
   Animated,
   Alert,
   Platform,
+  Share,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -99,6 +100,34 @@ export default function TripScreen() {
     addDemoMembers();
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert('Done', '4 demo members added with preferences!');
+  };
+
+  const handleShareTrip = async () => {
+    if (!activeTrip) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    const inviteUrl = `https://roamly.app/join/${activeTrip.inviteCode}`;
+    const memberCount = activeTrip.members.length;
+    const dateInfo = activeTripPlan?.summary?.recommended_dates
+      ? ` | ${activeTripPlan.summary.recommended_dates}`
+      : '';
+    const message = `Join our trip to ${activeTrip.destination}!\n\n🗺 ${activeTrip.name}\n📍 ${activeTrip.destination}${dateInfo}\n👥 ${memberCount} ${memberCount === 1 ? 'person' : 'people'} already joined\n\n${inviteUrl}`;
+
+    try {
+      await Share.share(
+        {
+          message,
+          url: inviteUrl,
+          title: `Join ${activeTrip.name} on Roamly`,
+        },
+        {
+          subject: `You're invited to ${activeTrip.name}!`,
+          dialogTitle: 'Share Trip Invite',
+        }
+      );
+    } catch (err) {
+      console.log('Share failed:', err);
+    }
   };
 
   const handleBack = () => {
@@ -254,6 +283,14 @@ export default function TripScreen() {
                 onVote={castVote}
                 finalized={activeTrip.finalized}
                 onFinalize={finalizePlan}
+                onShareTrip={handleShareTrip}
+                shareTripInfo={{
+                  tripName: activeTrip.name,
+                  destination: activeTrip.destination,
+                  dates: activeTripPlan.summary.recommended_dates,
+                  memberCount: activeTrip.members.length,
+                  inviteCode: activeTrip.inviteCode,
+                }}
               />
             )}
           </ScrollView>

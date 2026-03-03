@@ -28,11 +28,21 @@ import {
   Lock,
   CheckCircle,
   Clock,
+  Share2,
+  ExternalLink,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/colors';
 import { TripPlan, Vote, FinalizedChoices } from '@/types/trip';
 import { formatDateRange, formatDisplayDate } from '@/utils/helpers';
+
+interface ShareTripInfo {
+  tripName: string;
+  destination: string;
+  dates: string;
+  memberCount: number;
+  inviteCode: string;
+}
 
 interface PlanViewProps {
   plan: TripPlan;
@@ -42,6 +52,8 @@ interface PlanViewProps {
   onVote: (itemId: string, vote: 'up' | 'down') => void;
   finalized?: FinalizedChoices;
   onFinalize?: () => void;
+  onShareTrip?: () => void;
+  shareTripInfo?: ShareTripInfo;
 }
 
 const TABS = [
@@ -604,7 +616,7 @@ const countdownStyles = StyleSheet.create({
   },
 });
 
-export default function PlanView({ plan, votes, currentUserId, isLeader, onVote, finalized, onFinalize }: PlanViewProps) {
+export default function PlanView({ plan, votes, currentUserId, isLeader, onVote, finalized, onFinalize, onShareTrip, shareTripInfo }: PlanViewProps) {
   const [tab, setTab] = useState<TabId>('overview');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -662,6 +674,8 @@ export default function PlanView({ plan, votes, currentUserId, isLeader, onVote,
             isFinalized={isFinalized}
             finalized={finalized}
             onFinalize={handleFinalize}
+            onShareTrip={onShareTrip}
+            shareTripInfo={shareTripInfo}
           />
         )}
         {tab === 'lodging' && plan.lodging && (
@@ -717,12 +731,14 @@ function generateTripVibe(plan: TripPlan): string {
   return `Get ready for ${groupDesc} to ${dest}! Over ${nights} nights, you'll enjoy ${vibeStr} crafted around everyone's preferences. This is going to be one for the books.`;
 }
 
-function OverviewTab({ plan, isLeader, isFinalized, finalized, onFinalize }: {
+function OverviewTab({ plan, isLeader, isFinalized, finalized, onFinalize, onShareTrip, shareTripInfo }: {
   plan: TripPlan;
   isLeader: boolean;
   isFinalized: boolean;
   finalized?: FinalizedChoices;
   onFinalize: () => void;
+  onShareTrip?: () => void;
+  shareTripInfo?: ShareTripInfo;
 }) {
   const s = plan.summary;
   const vibeText = generateTripVibe(plan);
@@ -797,6 +813,30 @@ function OverviewTab({ plan, isLeader, isFinalized, finalized, onFinalize }: {
         <Text style={styles.vibeText}>{vibeText}</Text>
       </View>
 
+      {onShareTrip && shareTripInfo && (
+        <TouchableOpacity style={shareStyles.button} onPress={onShareTrip} activeOpacity={0.85}>
+          <LinearGradient
+            colors={['#FF6B4A', '#FF8E53', '#FFAB40']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={shareStyles.gradient}
+          >
+            <View style={shareStyles.content}>
+              <View style={shareStyles.iconCircle}>
+                <Share2 size={18} color="#FF6B4A" />
+              </View>
+              <View style={shareStyles.textCol}>
+                <Text style={shareStyles.title}>Share Trip</Text>
+                <Text style={shareStyles.subtitle}>
+                  Invite friends — {shareTripInfo.memberCount} {shareTripInfo.memberCount === 1 ? 'person' : 'people'} already in
+                </Text>
+              </View>
+              <ExternalLink size={16} color="rgba(255,255,255,0.7)" />
+            </View>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+
       {isLeader && !isFinalized && (
         <TouchableOpacity style={finalizeStyles.button} onPress={onFinalize} activeOpacity={0.85}>
           <LinearGradient
@@ -833,6 +873,57 @@ function OverviewTab({ plan, isLeader, isFinalized, finalized, onFinalize }: {
     </View>
   );
 }
+
+const shareStyles = StyleSheet.create({
+  button: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#FF6B4A',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.25,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+      default: {},
+    }),
+  },
+  gradient: {
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  textCol: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    marginTop: 2,
+  },
+});
 
 const finalizeStyles = StyleSheet.create({
   button: {
