@@ -288,12 +288,13 @@ INSTRUCTIONS:
 - Choose accommodation that satisfies the most must-haves
 - Plan activities that cover the most popular interests across the group
 - Account for dietary restrictions when recommending restaurants
+- You MUST generate exactly one flight entry for every single member listed below, no exceptions. If a member has no airport preference, use a major hub closest to a US city. Every member in the group must have a flight.
 - Suggest flights from each member's home airport, respecting their nonstop/timing preferences
 - Stay within individual flight budgets
 - If rental car is needed by majority, include it in the plan
 - Prioritize must-haves and avoid deal breakers from all members
 
-Generate a COMPLETE trip plan with real place names, realistic prices, practical timing. Include 3 lodging options, flights for each member, a full day-by-day itinerary, at least 8 restaurants, and 5 pro tips.
+Generate a COMPLETE trip plan with real place names, realistic prices, practical timing. Include 3 lodging options, exactly one flight for EACH of the ${allMembers.length} members listed above (${allMembers.map(m => m.name).join(', ')}), a full day-by-day itinerary, at least 8 restaurants, and 5 pro tips.
 
 IMPORTANT DATE FORMAT: All dates must be formatted as "Month Day Year" with no commas. Examples: "January 15 2026", "March 3 2026". The recommended_dates field should use "YYYY-MM-DD to YYYY-MM-DD" format. Each itinerary day's date field must use "Month Day Year" format with no commas.`;
 
