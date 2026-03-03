@@ -28,6 +28,7 @@ export default function TripScreen() {
     genProgress,
     addDemoMembers,
     generatePlan,
+    castVote,
     setActiveTrip,
     setActiveTripPlan,
   } = useTrips();
@@ -243,7 +244,15 @@ export default function TripScreen() {
               </Animated.View>
             )}
 
-            {activeTripPlan && !isGenerating && <PlanView plan={activeTripPlan} />}
+            {activeTripPlan && !isGenerating && (
+              <PlanView
+                plan={activeTripPlan}
+                votes={activeTrip.votes || []}
+                currentUserId={currentUser.id}
+                isLeader={isLeader}
+                onVote={castVote}
+              />
+            )}
           </ScrollView>
         </Animated.View>
       </SafeAreaView>

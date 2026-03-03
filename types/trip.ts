@@ -114,6 +114,13 @@ export interface TripData {
   constraints: string;
 }
 
+export interface Vote {
+  userId: string;
+  userName: string;
+  itemId: string;
+  vote: 'up' | 'down';
+}
+
 export interface Trip extends TripData {
   id: string;
   inviteCode: string;
@@ -123,4 +130,5 @@ export interface Trip extends TripData {
   status: 'collecting' | 'planned' | 'completed';
   createdAt: string;
   plan: TripPlan | null;
+  votes: Vote[];
 }

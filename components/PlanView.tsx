@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -20,13 +20,23 @@ import {
   Star,
   Utensils,
   Compass,
+  ThumbsUp,
+  ThumbsDown,
+  Crown,
+  Bed,
+  UtensilsCrossed,
+  Activity,
 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
-import { TripPlan } from '@/types/trip';
+import { TripPlan, Vote } from '@/types/trip';
 import { formatDateRange, formatDisplayDate } from '@/utils/helpers';
 
 interface PlanViewProps {
   plan: TripPlan;
+  votes: Vote[];
+  currentUserId: string;
+  isLeader: boolean;
+  onVote: (itemId: string, vote: 'up' | 'down') => void;
 }
 
 const TABS = [
@@ -35,13 +45,14 @@ const TABS = [
   { id: 'flights', label: 'Flights' },
   { id: 'itinerary', label: 'Itinerary' },
   { id: 'food', label: 'Food' },
+  { id: 'votes', label: 'Votes' },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
 
 const TIP_ICONS = [Lightbulb, Star, Compass, Utensils, MapPin];
 
-export default function PlanView({ plan }: PlanViewProps) {
+export default function PlanView({ plan, votes, currentUserId, isLeader, onVote }: PlanViewProps) {
   const [tab, setTab] = useState<TabId>('overview');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
@@ -76,6 +87,15 @@ export default function PlanView({ plan }: PlanViewProps) {
         {tab === 'flights' && plan.flights && <FlightsTab plan={plan} />}
         {tab === 'itinerary' && plan.itinerary && <ItineraryTab plan={plan} />}
         {tab === 'food' && plan.restaurants && <FoodTab plan={plan} />}
+        {tab === 'votes' && (
+          <VotesTab
+            plan={plan}
+            votes={votes}
+            currentUserId={currentUserId}
+            isLeader={isLeader}
+            onVote={onVote}
+          />
+        )}
       </Animated.View>
     </View>
   );
@@ -320,6 +340,427 @@ function ItineraryTab({ plan }: { plan: TripPlan }) {
     </View>
   );
 }
+
+interface VotesTabProps {
+  plan: TripPlan;
+  votes: Vote[];
+  currentUserId: string;
+  isLeader: boolean;
+  onVote: (itemId: string, vote: 'up' | 'down') => void;
+}
+
+interface VoteableItem {
+  id: string;
+  name: string;
+  subtitle: string;
+  category: 'lodging' | 'activity' | 'restaurant';
+}
+
+function extractVoteableItems(plan: TripPlan): VoteableItem[] {
+  const items: VoteableItem[] = [];
+  plan.lodging?.slice(0, 3).forEach((l, i) => {
+    items.push({
+      id: `lodging-${i}`,
+      name: l.name,
+      subtitle: `${l.type} · ${l.price_per_night}/night`,
+      category: 'lodging',
+    });
+  });
+  const activities: { name: string; day: number }[] = [];
+  plan.itinerary?.forEach((day) => {
+    (['morning', 'afternoon', 'evening'] as const).forEach((slot) => {
+      const data = day[slot];
+      if (data?.activity) {
+        activities.push({ name: data.activity, day: day.day });
+      }
+    });
+  });
+  const seen = new Set<string>();
+  activities.forEach((a) => {
+    const key = a.name.toLowerCase();
+    if (!seen.has(key) && items.filter((x) => x.category === 'activity').length < 5) {
+      seen.add(key);
+      items.push({
+        id: `activity-${items.length}`,
+        name: a.name,
+        subtitle: `Day ${a.day}`,
+        category: 'activity',
+      });
+    }
+  });
+  plan.restaurants?.slice(0, 3).forEach((r, i) => {
+    items.push({
+      id: `restaurant-${i}`,
+      name: r.name,
+      subtitle: `${r.cuisine} · ${r.price_range}`,
+      category: 'restaurant',
+    });
+  });
+  return items;
+}
+
+function VotesTab({ plan, votes, currentUserId, isLeader, onVote }: VotesTabProps) {
+  const items = useMemo(() => extractVoteableItems(plan), [plan]);
+  const scaleAnims = useRef<Record<string, Animated.Value>>({});
+
+  const getScale = useCallback((itemId: string, type: 'up' | 'down') => {
+    const key = `${itemId}-${type}`;
+    if (!scaleAnims.current[key]) {
+      scaleAnims.current[key] = new Animated.Value(1);
+    }
+    return scaleAnims.current[key];
+  }, []);
+
+  const handleVote = useCallback((itemId: string, type: 'up' | 'down') => {
+    const scale = getScale(itemId, type);
+    Animated.sequence([
+      Animated.timing(scale, { toValue: 1.3, duration: 100, useNativeDriver: true }),
+      Animated.timing(scale, { toValue: 1, duration: 100, useNativeDriver: true }),
+    ]).start();
+    onVote(itemId, type);
+  }, [onVote, getScale]);
+
+  const getTally = useCallback((itemId: string) => {
+    const itemVotes = votes.filter((v) => v.itemId === itemId);
+    return {
+      up: itemVotes.filter((v) => v.vote === 'up').length,
+      down: itemVotes.filter((v) => v.vote === 'down').length,
+    };
+  }, [votes]);
+
+  const getMyVote = useCallback((itemId: string): 'up' | 'down' | null => {
+    const v = votes.find((v) => v.itemId === itemId && v.userId === currentUserId);
+    return v?.vote ?? null;
+  }, [votes, currentUserId]);
+
+  const categoryIcon = (cat: 'lodging' | 'activity' | 'restaurant') => {
+    switch (cat) {
+      case 'lodging': return Bed;
+      case 'activity': return Activity;
+      case 'restaurant': return UtensilsCrossed;
+    }
+  };
+
+  const categoryLabel = (cat: 'lodging' | 'activity' | 'restaurant') => {
+    switch (cat) {
+      case 'lodging': return 'Lodging Options';
+      case 'activity': return 'Top Activities';
+      case 'restaurant': return 'Restaurant Picks';
+    }
+  };
+
+  const groupedItems = useMemo(() => {
+    const groups: { category: 'lodging' | 'activity' | 'restaurant'; items: VoteableItem[] }[] = [];
+    const cats: ('lodging' | 'activity' | 'restaurant')[] = ['lodging', 'activity', 'restaurant'];
+    cats.forEach((cat) => {
+      const catItems = items.filter((i) => i.category === cat);
+      if (catItems.length > 0) groups.push({ category: cat, items: catItems });
+    });
+    return groups;
+  }, [items]);
+
+  const topPicks = useMemo(() => {
+    if (!isLeader) return [];
+    return items
+      .map((item) => {
+        const tally = getTally(item.id);
+        return { ...item, up: tally.up, down: tally.down, score: tally.up - tally.down };
+      })
+      .filter((item) => item.up > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 5);
+  }, [items, isLeader, getTally]);
+
+  return (
+    <View>
+      {isLeader && topPicks.length > 0 && (
+        <View style={voteStyles.leaderCard}>
+          <View style={voteStyles.leaderHeader}>
+            <Crown size={16} color="#F59E0B" />
+            <Text style={voteStyles.leaderTitle}>Group Favorites</Text>
+          </View>
+          <Text style={voteStyles.leaderSubtitle}>Based on your group&apos;s votes</Text>
+          {topPicks.map((item, i) => (
+            <View key={item.id} style={voteStyles.topPickRow}>
+              <View style={voteStyles.topPickRank}>
+                <Text style={voteStyles.topPickRankText}>{i + 1}</Text>
+              </View>
+              <View style={voteStyles.topPickInfo}>
+                <Text style={voteStyles.topPickName}>{item.name}</Text>
+                <Text style={voteStyles.topPickMeta}>{item.subtitle}</Text>
+              </View>
+              <View style={voteStyles.topPickScore}>
+                <ThumbsUp size={12} color="#10B981" />
+                <Text style={voteStyles.topPickScoreText}>{item.up}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {groupedItems.map((group) => {
+        const CatIcon = categoryIcon(group.category);
+        return (
+          <View key={group.category} style={voteStyles.section}>
+            <View style={voteStyles.sectionHeader}>
+              <CatIcon size={16} color="#FF6B4A" />
+              <Text style={voteStyles.sectionTitle}>{categoryLabel(group.category)}</Text>
+            </View>
+            {group.items.map((item) => {
+              const tally = getTally(item.id);
+              const myVote = getMyVote(item.id);
+              const totalVotes = tally.up + tally.down;
+              const upPct = totalVotes > 0 ? (tally.up / totalVotes) * 100 : 50;
+
+              return (
+                <View key={item.id} style={voteStyles.voteCard}>
+                  <View style={voteStyles.voteCardTop}>
+                    <View style={voteStyles.voteCardInfo}>
+                      <Text style={voteStyles.voteCardName}>{item.name}</Text>
+                      <Text style={voteStyles.voteCardSub}>{item.subtitle}</Text>
+                    </View>
+                    <View style={voteStyles.voteButtons}>
+                      <TouchableOpacity
+                        style={[
+                          voteStyles.voteBtn,
+                          voteStyles.voteBtnUp,
+                          myVote === 'up' && voteStyles.voteBtnUpActive,
+                        ]}
+                        onPress={() => handleVote(item.id, 'up')}
+                        activeOpacity={0.7}
+                      >
+                        <Animated.View style={{ transform: [{ scale: getScale(item.id, 'up') }] }}>
+                          <ThumbsUp size={14} color={myVote === 'up' ? '#FFFFFF' : '#10B981'} />
+                        </Animated.View>
+                        <Text style={[
+                          voteStyles.voteBtnCount,
+                          myVote === 'up' && voteStyles.voteBtnCountActive,
+                        ]}>{tally.up}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[
+                          voteStyles.voteBtn,
+                          voteStyles.voteBtnDown,
+                          myVote === 'down' && voteStyles.voteBtnDownActive,
+                        ]}
+                        onPress={() => handleVote(item.id, 'down')}
+                        activeOpacity={0.7}
+                      >
+                        <Animated.View style={{ transform: [{ scale: getScale(item.id, 'down') }] }}>
+                          <ThumbsDown size={14} color={myVote === 'down' ? '#FFFFFF' : '#EF4444'} />
+                        </Animated.View>
+                        <Text style={[
+                          voteStyles.voteBtnCount,
+                          myVote === 'down' && voteStyles.voteBtnCountActive,
+                        ]}>{tally.down}</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  {totalVotes > 0 && (
+                    <View style={voteStyles.tallyBar}>
+                      <View style={[voteStyles.tallyFillUp, { width: `${upPct}%` }]} />
+                      <View style={[voteStyles.tallyFillDown, { width: `${100 - upPct}%` }]} />
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        );
+      })}
+
+      {items.length === 0 && (
+        <View style={voteStyles.emptyState}>
+          <ThumbsUp size={32} color={Colors.textDim} />
+          <Text style={voteStyles.emptyText}>No items to vote on yet</Text>
+          <Text style={voteStyles.emptySubtext}>Generate a trip plan to start voting</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+const voteStyles = StyleSheet.create({
+  leaderCard: {
+    backgroundColor: '#FFFBEB',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.2)',
+  },
+  leaderHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  leaderTitle: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: Colors.text,
+  },
+  leaderSubtitle: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    marginBottom: 14,
+  },
+  topPickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(245, 158, 11, 0.1)',
+    gap: 10,
+  },
+  topPickRank: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  topPickRankText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#D97706',
+  },
+  topPickInfo: {
+    flex: 1,
+  },
+  topPickName: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  topPickMeta: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 1,
+  },
+  topPickScore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  topPickScoreText: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: '#10B981',
+  },
+  section: {
+    marginBottom: 20,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: Colors.text,
+  },
+  voteCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  voteCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  voteCardInfo: {
+    flex: 1,
+    marginRight: 12,
+  },
+  voteCardName: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  voteCardSub: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 2,
+  },
+  voteButtons: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  voteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  voteBtnUp: {
+    backgroundColor: 'rgba(16, 185, 129, 0.06)',
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+  },
+  voteBtnUpActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  voteBtnDown: {
+    backgroundColor: 'rgba(239, 68, 68, 0.06)',
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+  },
+  voteBtnDownActive: {
+    backgroundColor: '#EF4444',
+    borderColor: '#EF4444',
+  },
+  voteBtnCount: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.textSecondary,
+  },
+  voteBtnCountActive: {
+    color: '#FFFFFF',
+  },
+  tallyBar: {
+    flexDirection: 'row',
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: 10,
+  },
+  tallyFillUp: {
+    backgroundColor: '#10B981',
+    height: 4,
+    borderTopLeftRadius: 2,
+    borderBottomLeftRadius: 2,
+  },
+  tallyFillDown: {
+    backgroundColor: '#EF4444',
+    height: 4,
+    borderTopRightRadius: 2,
+    borderBottomRightRadius: 2,
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    gap: 8,
+  },
+  emptyText: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: Colors.textMuted,
+  },
+  emptySubtext: {
+    fontSize: 13,
+    color: Colors.textDim,
+  },
+});
 
 function FoodTab({ plan }: { plan: TripPlan }) {
   return (

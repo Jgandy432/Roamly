@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateObject } from '@rork-ai/toolkit-sdk';
 import { z } from 'zod';
-import { Trip, TripData, TripPlan, TripMember, AppUser, UserPreferences } from '@/types/trip';
+import { Trip, TripData, TripPlan, TripMember, AppUser, UserPreferences, Vote } from '@/types/trip';
 import { generateId, generateInviteCode } from '@/utils/helpers';
 import { generateFallbackPlan } from '@/utils/fallback-plan';
 
@@ -179,6 +179,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
       status: 'collecting',
       createdAt: new Date().toISOString(),
       plan: null,
+      votes: [],
     };
     const updated = [...trips, newTrip];
     saveTrips.mutate(updated);
@@ -264,6 +265,24 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     setActiveTrip(updatedTrip);
   }, [activeTrip, trips]);
 
+  const castVote = useCallback((itemId: string, vote: 'up' | 'down') => {
+    if (!activeTrip || !currentUser) return;
+    const existing = (activeTrip.votes || []).filter(
+      (v) => !(v.userId === currentUser.id && v.itemId === itemId)
+    );
+    const newVote: Vote = {
+      userId: currentUser.id,
+      userName: currentUser.name,
+      itemId,
+      vote,
+    };
+    const updatedVotes = [...existing, newVote];
+    const updatedTrip: Trip = { ...activeTrip, votes: updatedVotes };
+    const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
+    saveTrips.mutate(updated);
+    setActiveTrip(updatedTrip);
+  }, [activeTrip, currentUser, trips]);
+
   const generatePlan = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     if (!activeTrip) return { success: false, message: 'No active trip' };
     setIsGenerating(true);
@@ -343,6 +362,7 @@ IMPORTANT DATE FORMAT: All dates must be formatted as "Month Day Year" with no c
     submitPreferences,
     addDemoMembers,
     generatePlan,
+    castVote,
     setActiveTrip,
     setActiveTripPlan,
   };
