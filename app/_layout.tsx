@@ -29,6 +29,7 @@ function RootLayoutNav() {
       <Stack.Screen name="trip" />
       <Stack.Screen name="preferences" />
       <Stack.Screen name="profile" />
+      <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
     </Stack>
   );
 }

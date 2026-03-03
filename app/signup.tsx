@@ -90,7 +90,7 @@ export default function SignupScreen() {
       setStep('name');
     } else if (step === 'name') {
       login(email, name.trim());
-      router.replace('/dashboard');
+      router.replace('/onboarding');
     }
   };
 
