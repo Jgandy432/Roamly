@@ -121,14 +121,21 @@ export interface Vote {
   vote: 'up' | 'down';
 }
 
+export interface FinalizedChoices {
+  confirmedItems: string[];
+  finalizedAt: string;
+  summary: string;
+}
+
 export interface Trip extends TripData {
   id: string;
   inviteCode: string;
   leaderId: string;
   leaderName: string;
   members: TripMember[];
-  status: 'collecting' | 'planned' | 'completed';
+  status: 'collecting' | 'planned' | 'finalized' | 'completed';
   createdAt: string;
   plan: TripPlan | null;
   votes: Vote[];
+  finalized?: FinalizedChoices;
 }

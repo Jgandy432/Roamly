@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateObject } from '@rork-ai/toolkit-sdk';
 import { z } from 'zod';
-import { Trip, TripData, TripPlan, TripMember, AppUser, UserPreferences, Vote } from '@/types/trip';
+import { Trip, TripData, TripPlan, TripMember, AppUser, UserPreferences, Vote, FinalizedChoices } from '@/types/trip';
 import { generateId, generateInviteCode } from '@/utils/helpers';
 import { generateFallbackPlan } from '@/utils/fallback-plan';
 
@@ -267,6 +267,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
 
   const castVote = useCallback((itemId: string, vote: 'up' | 'down') => {
     if (!activeTrip || !currentUser) return;
+    if (activeTrip.finalized) return;
     const existing = (activeTrip.votes || []).filter(
       (v) => !(v.userId === currentUser.id && v.itemId === itemId)
     );
@@ -347,6 +348,60 @@ IMPORTANT DATE FORMAT: All dates must be formatted as "Month Day Year" with no c
     }
   }, [activeTrip, trips]);
 
+  const finalizePlan = useCallback(() => {
+    if (!activeTrip || !activeTrip.plan) return;
+    const plan = activeTrip.plan;
+    const tripVotes = activeTrip.votes || [];
+    const confirmed: string[] = [];
+
+    const getScore = (itemId: string) => {
+      const itemVotes = tripVotes.filter((v) => v.itemId === itemId);
+      const up = itemVotes.filter((v) => v.vote === 'up').length;
+      const down = itemVotes.filter((v) => v.vote === 'down').length;
+      return up - down;
+    };
+
+    let bestLodgingIdx = 0;
+    let bestLodgingScore = -Infinity;
+    plan.lodging.forEach((_, i) => {
+      const score = getScore(`lodging-${i}`);
+      if (score > bestLodgingScore) {
+        bestLodgingScore = score;
+        bestLodgingIdx = i;
+      }
+    });
+    confirmed.push(`lodging-${bestLodgingIdx}`);
+
+    plan.flights.forEach((_, i) => {
+      confirmed.push(`flight-${i}`);
+    });
+
+    plan.itinerary.forEach((day) => {
+      (['morning', 'afternoon', 'evening'] as const).forEach((slot) => {
+        const data = day[slot];
+        if (data?.activity) {
+          confirmed.push(`activity-${day.day}-${slot}`);
+        }
+      });
+    });
+
+    const lodgingName = plan.lodging[bestLodgingIdx]?.name || 'Selected lodging';
+    const nights = plan.summary.total_nights;
+    const dest = plan.summary.destination;
+    const summary = `${nights} nights in ${dest} staying at ${lodgingName} with ${plan.flights.length} flights booked and ${plan.itinerary.length} days of activities planned.`;
+
+    const finalizedData: FinalizedChoices = {
+      confirmedItems: confirmed,
+      finalizedAt: new Date().toISOString(),
+      summary,
+    };
+
+    const updatedTrip: Trip = { ...activeTrip, status: 'finalized', finalized: finalizedData };
+    const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
+    saveTrips.mutate(updated);
+    setActiveTrip(updatedTrip);
+  }, [activeTrip, trips]);
+
   return {
     currentUser,
     trips,
@@ -363,6 +418,7 @@ IMPORTANT DATE FORMAT: All dates must be formatted as "Month Day Year" with no c
     addDemoMembers,
     generatePlan,
     castVote,
+    finalizePlan,
     setActiveTrip,
     setActiveTripPlan,
   };

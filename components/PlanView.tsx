@@ -7,6 +7,7 @@ import {
   ScrollView,
   Animated,
   Platform,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -24,9 +25,13 @@ import {
   ThumbsDown,
   Zap,
   TrendingUp,
+  Lock,
+  CheckCircle,
+  Clock,
 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import { Colors } from '@/constants/colors';
-import { TripPlan, Vote } from '@/types/trip';
+import { TripPlan, Vote, FinalizedChoices } from '@/types/trip';
 import { formatDateRange, formatDisplayDate } from '@/utils/helpers';
 
 interface PlanViewProps {
@@ -35,6 +40,8 @@ interface PlanViewProps {
   currentUserId: string;
   isLeader: boolean;
   onVote: (itemId: string, vote: 'up' | 'down') => void;
+  finalized?: FinalizedChoices;
+  onFinalize?: () => void;
 }
 
 const TABS = [
@@ -92,35 +99,35 @@ function useVoteHelpers(votes: Vote[], currentUserId: string, onVote: (itemId: s
   return { getTally, getMyVote, handleVote, getScale };
 }
 
-function InlineVote({ itemId, helpers }: { itemId: string; helpers: VoteHelpers }) {
+function InlineVote({ itemId, helpers, disabled }: { itemId: string; helpers: VoteHelpers; disabled?: boolean }) {
   const tally = helpers.getTally(itemId);
   const myVote = helpers.getMyVote(itemId);
 
   return (
     <View style={inlineVoteStyles.row}>
       <TouchableOpacity
-        style={[inlineVoteStyles.btn, myVote === 'up' && inlineVoteStyles.btnUpActive]}
-        onPress={() => helpers.handleVote(itemId, 'up')}
-        activeOpacity={0.7}
+        style={[inlineVoteStyles.btn, myVote === 'up' && inlineVoteStyles.btnUpActive, disabled && inlineVoteStyles.btnDisabled]}
+        onPress={() => !disabled && helpers.handleVote(itemId, 'up')}
+        activeOpacity={disabled ? 1 : 0.7}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
       >
         <Animated.View style={{ transform: [{ scale: helpers.getScale(itemId, 'up') }] }}>
-          <ThumbsUp size={12} color={myVote === 'up' ? '#fff' : '#10B981'} />
+          <ThumbsUp size={12} color={myVote === 'up' ? '#fff' : disabled ? '#C7C7CC' : '#10B981'} />
         </Animated.View>
-        <Text style={[inlineVoteStyles.count, myVote === 'up' && inlineVoteStyles.countActive]}>
+        <Text style={[inlineVoteStyles.count, myVote === 'up' && inlineVoteStyles.countActive, disabled && !myVote && inlineVoteStyles.countDisabled]}>
           {tally.up}
         </Text>
       </TouchableOpacity>
       <TouchableOpacity
-        style={[inlineVoteStyles.btn, myVote === 'down' && inlineVoteStyles.btnDownActive]}
-        onPress={() => helpers.handleVote(itemId, 'down')}
-        activeOpacity={0.7}
+        style={[inlineVoteStyles.btn, myVote === 'down' && inlineVoteStyles.btnDownActive, disabled && inlineVoteStyles.btnDisabled]}
+        onPress={() => !disabled && helpers.handleVote(itemId, 'down')}
+        activeOpacity={disabled ? 1 : 0.7}
         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
       >
         <Animated.View style={{ transform: [{ scale: helpers.getScale(itemId, 'down') }] }}>
-          <ThumbsDown size={12} color={myVote === 'down' ? '#fff' : '#EF4444'} />
+          <ThumbsDown size={12} color={myVote === 'down' ? '#fff' : disabled ? '#C7C7CC' : '#EF4444'} />
         </Animated.View>
-        <Text style={[inlineVoteStyles.count, myVote === 'down' && inlineVoteStyles.countActive]}>
+        <Text style={[inlineVoteStyles.count, myVote === 'down' && inlineVoteStyles.countActive, disabled && !myVote && inlineVoteStyles.countDisabled]}>
           {tally.down}
         </Text>
       </TouchableOpacity>
@@ -153,6 +160,9 @@ const inlineVoteStyles = StyleSheet.create({
     backgroundColor: '#EF4444',
     borderColor: '#EF4444',
   },
+  btnDisabled: {
+    opacity: 0.5,
+  },
   count: {
     fontSize: 11,
     fontWeight: '600' as const,
@@ -160,6 +170,9 @@ const inlineVoteStyles = StyleSheet.create({
   },
   countActive: {
     color: '#fff',
+  },
+  countDisabled: {
+    color: Colors.textDim,
   },
 });
 
@@ -341,11 +354,263 @@ const bannerStyles = StyleSheet.create({
   },
 });
 
-export default function PlanView({ plan, votes, currentUserId, isLeader, onVote }: PlanViewProps) {
+function FinalizedBanner({ summary }: { summary: string }) {
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.spring(scaleAnim, { toValue: 1, friction: 6, tension: 80, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+    ]).start();
+  }, []);
+
+  return (
+    <Animated.View style={[finalizedBannerStyles.container, { opacity: opacityAnim, transform: [{ scale: scaleAnim }] }]}>
+      <LinearGradient
+        colors={['#059669', '#10B981', '#34D399']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={finalizedBannerStyles.gradient}
+      >
+        <View style={finalizedBannerStyles.iconRow}>
+          <View style={finalizedBannerStyles.iconCircle}>
+            <CheckCircle size={20} color="#fff" />
+          </View>
+          <View style={finalizedBannerStyles.textWrap}>
+            <Text style={finalizedBannerStyles.title}>Your trip plan is locked in!</Text>
+            <Text style={finalizedBannerStyles.subtitle}>{summary}</Text>
+          </View>
+        </View>
+        <View style={finalizedBannerStyles.decoCircle1} />
+        <View style={finalizedBannerStyles.decoCircle2} />
+      </LinearGradient>
+    </Animated.View>
+  );
+}
+
+const finalizedBannerStyles = StyleSheet.create({
+  container: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  gradient: {
+    padding: 18,
+    position: 'relative' as const,
+    overflow: 'hidden',
+  },
+  iconRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    zIndex: 2,
+  },
+  iconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  textWrap: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '800' as const,
+    color: '#fff',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    lineHeight: 18,
+  },
+  decoCircle1: {
+    position: 'absolute',
+    top: -20,
+    right: -20,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  decoCircle2: {
+    position: 'absolute',
+    bottom: -15,
+    right: 50,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+  },
+});
+
+function ConfirmedBadge() {
+  return (
+    <View style={confirmedStyles.badge}>
+      <CheckCircle size={11} color="#fff" />
+      <Text style={confirmedStyles.text}>Confirmed</Text>
+    </View>
+  );
+}
+
+const confirmedStyles = StyleSheet.create({
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  text: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: '#fff',
+  },
+});
+
+function CountdownSection({ dateStr }: { dateStr: string }) {
+  const daysUntil = useMemo(() => {
+    const parts = dateStr.split(' to ');
+    const startStr = parts[0]?.trim();
+    if (!startStr) return null;
+    const start = new Date(startStr);
+    if (isNaN(start.getTime())) return null;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    start.setHours(0, 0, 0, 0);
+    const diff = Math.ceil((start.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? diff : null;
+  }, [dateStr]);
+
+  if (daysUntil === null) return null;
+
+  const weeks = Math.floor(daysUntil / 7);
+  const remainingDays = daysUntil % 7;
+
+  return (
+    <View style={countdownStyles.container}>
+      <LinearGradient
+        colors={['#1E293B', '#334155', '#475569']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={countdownStyles.gradient}
+      >
+        <View style={countdownStyles.content}>
+          <View style={countdownStyles.iconWrap}>
+            <Clock size={16} color="#F59E0B" />
+          </View>
+          <View style={countdownStyles.textCol}>
+            <Text style={countdownStyles.label}>COUNTDOWN TO DEPARTURE</Text>
+            <View style={countdownStyles.numbersRow}>
+              <View style={countdownStyles.numberBlock}>
+                <Text style={countdownStyles.number}>{daysUntil}</Text>
+                <Text style={countdownStyles.unit}>days</Text>
+              </View>
+              {weeks > 0 && (
+                <>
+                  <Text style={countdownStyles.separator}>=</Text>
+                  <View style={countdownStyles.numberBlock}>
+                    <Text style={countdownStyles.numberSmall}>{weeks}w {remainingDays}d</Text>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        </View>
+        <View style={countdownStyles.decoLine} />
+      </LinearGradient>
+    </View>
+  );
+}
+
+const countdownStyles = StyleSheet.create({
+  container: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: 16,
+  },
+  gradient: {
+    padding: 16,
+    position: 'relative' as const,
+    overflow: 'hidden',
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    zIndex: 2,
+  },
+  iconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  textCol: {
+    flex: 1,
+  },
+  label: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: 'rgba(255,255,255,0.5)',
+    letterSpacing: 1.5,
+    marginBottom: 6,
+  },
+  numbersRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+  },
+  numberBlock: {
+    alignItems: 'center',
+  },
+  number: {
+    fontSize: 32,
+    fontWeight: '800' as const,
+    color: '#F59E0B',
+    lineHeight: 36,
+  },
+  numberSmall: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: 'rgba(255,255,255,0.6)',
+  },
+  unit: {
+    fontSize: 11,
+    fontWeight: '500' as const,
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: 2,
+  },
+  separator: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.3)',
+  },
+  decoLine: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: '#F59E0B',
+    opacity: 0.3,
+  },
+});
+
+export default function PlanView({ plan, votes, currentUserId, isLeader, onVote, finalized, onFinalize }: PlanViewProps) {
   const [tab, setTab] = useState<TabId>('overview');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const voteHelpers = useVoteHelpers(votes, currentUserId, onVote);
+  const isFinalized = !!finalized;
+  const confirmedItems = useMemo(() => new Set(finalized?.confirmedItems ?? []), [finalized]);
 
   useEffect(() => {
     fadeAnim.setValue(0);
@@ -355,6 +620,24 @@ export default function PlanView({ plan, votes, currentUserId, isLeader, onVote 
       Animated.timing(slideAnim, { toValue: 0, duration: 350, useNativeDriver: true }),
     ]).start();
   }, [tab]);
+
+  const handleFinalize = useCallback(() => {
+    Alert.alert(
+      'Finalize Trip Plan',
+      'This will lock in the top-voted options for everyone. Voting will be disabled. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Finalize',
+          style: 'destructive',
+          onPress: () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            onFinalize?.();
+          },
+        },
+      ]
+    );
+  }, [onFinalize]);
 
   return (
     <View style={styles.container}>
@@ -372,15 +655,23 @@ export default function PlanView({ plan, votes, currentUserId, isLeader, onVote 
       </ScrollView>
 
       <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-        {tab === 'overview' && plan.summary && <OverviewTab plan={plan} />}
+        {tab === 'overview' && plan.summary && (
+          <OverviewTab
+            plan={plan}
+            isLeader={isLeader}
+            isFinalized={isFinalized}
+            finalized={finalized}
+            onFinalize={handleFinalize}
+          />
+        )}
         {tab === 'lodging' && plan.lodging && (
-          <LodgingTab plan={plan} votes={votes} helpers={voteHelpers} />
+          <LodgingTab plan={plan} votes={votes} helpers={voteHelpers} isFinalized={isFinalized} confirmedItems={confirmedItems} />
         )}
         {tab === 'flights' && plan.flights && (
-          <FlightsTab plan={plan} votes={votes} helpers={voteHelpers} />
+          <FlightsTab plan={plan} votes={votes} helpers={voteHelpers} isFinalized={isFinalized} confirmedItems={confirmedItems} />
         )}
         {tab === 'itinerary' && plan.itinerary && (
-          <ItineraryTab plan={plan} votes={votes} helpers={voteHelpers} />
+          <ItineraryTab plan={plan} votes={votes} helpers={voteHelpers} isFinalized={isFinalized} confirmedItems={confirmedItems} />
         )}
         {tab === 'food' && plan.restaurants && <FoodTab plan={plan} />}
       </Animated.View>
@@ -426,7 +717,13 @@ function generateTripVibe(plan: TripPlan): string {
   return `Get ready for ${groupDesc} to ${dest}! Over ${nights} nights, you'll enjoy ${vibeStr} crafted around everyone's preferences. This is going to be one for the books.`;
 }
 
-function OverviewTab({ plan }: { plan: TripPlan }) {
+function OverviewTab({ plan, isLeader, isFinalized, finalized, onFinalize }: {
+  plan: TripPlan;
+  isLeader: boolean;
+  isFinalized: boolean;
+  finalized?: FinalizedChoices;
+  onFinalize: () => void;
+}) {
   const s = plan.summary;
   const vibeText = generateTripVibe(plan);
   const costText = s.estimated_cost_per_person
@@ -435,17 +732,27 @@ function OverviewTab({ plan }: { plan: TripPlan }) {
 
   return (
     <View>
+      <CountdownSection dateStr={s.recommended_dates} />
+
+      {isFinalized && finalized && (
+        <FinalizedBanner summary={finalized.summary} />
+      )}
+
       <View style={styles.heroWrapper}>
         <LinearGradient
-          colors={['#FF6B4A', '#FF8E53', '#FFB347']}
+          colors={isFinalized ? ['#059669', '#10B981', '#34D399'] : ['#FF6B4A', '#FF8E53', '#FFB347']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.heroGradient}
         >
           <View style={styles.heroOverlay}>
             <View style={styles.heroIconRow}>
-              <MapPin size={16} color="rgba(255,255,255,0.7)" />
-              <Text style={styles.heroLabel}>YOUR DESTINATION</Text>
+              {isFinalized ? (
+                <Lock size={16} color="rgba(255,255,255,0.7)" />
+              ) : (
+                <MapPin size={16} color="rgba(255,255,255,0.7)" />
+              )}
+              <Text style={styles.heroLabel}>{isFinalized ? 'CONFIRMED DESTINATION' : 'YOUR DESTINATION'}</Text>
             </View>
             <Text style={styles.heroDestination}>{s.destination}</Text>
             <View style={styles.heroDatesRow}>
@@ -490,6 +797,20 @@ function OverviewTab({ plan }: { plan: TripPlan }) {
         <Text style={styles.vibeText}>{vibeText}</Text>
       </View>
 
+      {isLeader && !isFinalized && (
+        <TouchableOpacity style={finalizeStyles.button} onPress={onFinalize} activeOpacity={0.85}>
+          <LinearGradient
+            colors={['#059669', '#10B981']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={finalizeStyles.gradient}
+          >
+            <Lock size={16} color="#fff" />
+            <Text style={finalizeStyles.buttonText}>Finalize Plan</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+
       {plan.pro_tips && plan.pro_tips.length > 0 && (
         <View style={styles.proTipsSection}>
           <View style={styles.proTipsTitleRow}>
@@ -513,7 +834,47 @@ function OverviewTab({ plan }: { plan: TripPlan }) {
   );
 }
 
-function LodgingTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[]; helpers: VoteHelpers }) {
+const finalizeStyles = StyleSheet.create({
+  button: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#059669',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 6,
+      },
+      default: {},
+    }),
+  },
+  gradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: '#fff',
+    letterSpacing: 0.3,
+  },
+});
+
+function LodgingTab({ plan, votes, helpers, isFinalized, confirmedItems }: {
+  plan: TripPlan;
+  votes: Vote[];
+  helpers: VoteHelpers;
+  isFinalized: boolean;
+  confirmedItems: Set<string>;
+}) {
   const bannerItems = useMemo(() =>
     plan.lodging.map((l, i) => ({
       id: `lodging-${i}`,
@@ -526,38 +887,56 @@ function LodgingTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[]; h
 
   return (
     <View>
-      <TopPicksBanner items={bannerItems} votes={votes} helpers={helpers} category="Lodging" />
+      {!isFinalized && (
+        <TopPicksBanner items={bannerItems} votes={votes} helpers={helpers} category="Lodging" />
+      )}
       {plan.lodging.map((l, i) => {
         const itemId = `lodging-${i}`;
+        const isConfirmed = confirmedItems.has(itemId);
+        const isHidden = isFinalized && !isConfirmed;
+
         return (
-          <View key={i} style={[styles.card, l.recommended && styles.cardHighlighted]}>
+          <View
+            key={i}
+            style={[
+              styles.card,
+              l.recommended && !isFinalized && styles.cardHighlighted,
+              isConfirmed && styles.cardConfirmed,
+              isHidden && styles.cardGrayed,
+            ]}
+          >
             <View style={styles.cardHeader}>
               <View style={styles.cardHeaderLeft}>
-                <Text style={styles.cardTitle}>{l.name}</Text>
-                <Text style={styles.cardSubtitle}>{l.type} · {l.area}</Text>
+                <Text style={[styles.cardTitle, isHidden && styles.textGrayed]}>{l.name}</Text>
+                <Text style={[styles.cardSubtitle, isHidden && styles.textGrayed]}>{l.type} · {l.area}</Text>
               </View>
               <View style={styles.cardHeaderRight}>
-                {l.recommended && (
+                {isConfirmed && <ConfirmedBadge />}
+                {l.recommended && !isFinalized && (
                   <View style={styles.recommendedBadge}>
                     <Text style={styles.recommendedText}>Recommended</Text>
                   </View>
                 )}
-                <InlineVote itemId={itemId} helpers={helpers} />
+                <InlineVote itemId={itemId} helpers={helpers} disabled={isFinalized} />
               </View>
             </View>
-            <Text style={styles.cardDesc}>{l.description}</Text>
-            <View style={styles.tagsRow}>
-              {l.highlights?.map((h, j) => (
-                <View key={j} style={styles.tag}>
-                  <Text style={styles.tagText}>{h}</Text>
-                </View>
-              ))}
-            </View>
+            <Text style={[styles.cardDesc, isHidden && styles.textGrayed]}>{l.description}</Text>
+            {!isHidden && (
+              <View style={styles.tagsRow}>
+                {l.highlights?.map((h, j) => (
+                  <View key={j} style={styles.tag}>
+                    <Text style={styles.tagText}>{h}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
             <View style={styles.cardFooter}>
-              <Text style={styles.priceText}>${l.price_per_night}/night · ${l.price_per_person_per_night}/pp/night</Text>
-              <Text style={l.fits_all_budgets ? styles.fitsBudget : styles.overBudget}>
-                {l.fits_all_budgets ? '✓ Fits all budgets' : '⚠ Over some budgets'}
-              </Text>
+              <Text style={[styles.priceText, isHidden && styles.textGrayed]}>${l.price_per_night}/night · ${l.price_per_person_per_night}/pp/night</Text>
+              {!isHidden && (
+                <Text style={l.fits_all_budgets ? styles.fitsBudget : styles.overBudget}>
+                  {l.fits_all_budgets ? '✓ Fits all budgets' : '⚠ Over some budgets'}
+                </Text>
+              )}
             </View>
           </View>
         );
@@ -575,7 +954,13 @@ function formatFlightDate(text: string): string {
   return result;
 }
 
-function FlightsTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[]; helpers: VoteHelpers }) {
+function FlightsTab({ plan, votes, helpers, isFinalized, confirmedItems }: {
+  plan: TripPlan;
+  votes: Vote[];
+  helpers: VoteHelpers;
+  isFinalized: boolean;
+  confirmedItems: Set<string>;
+}) {
   const bannerItems = useMemo(() =>
     plan.flights.map((f, i) => ({
       id: `flight-${i}`,
@@ -588,9 +973,18 @@ function FlightsTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[]; h
 
   return (
     <View>
-      <TopPicksBanner items={bannerItems} votes={votes} helpers={helpers} category="Flight" />
+      {!isFinalized && (
+        <TopPicksBanner items={bannerItems} votes={votes} helpers={helpers} category="Flight" />
+      )}
+      {isFinalized && (
+        <View style={confirmedHeaderStyles.container}>
+          <CheckCircle size={14} color="#10B981" />
+          <Text style={confirmedHeaderStyles.text}>All flights confirmed</Text>
+        </View>
+      )}
       {plan.flights.map((f, i) => {
         const itemId = `flight-${i}`;
+        const isConfirmed = confirmedItems.has(itemId);
         const formattedDeparture = formatFlightDate(f.departure_time ?? '');
         const formattedDetails = formatFlightDate(
           `${f.airport} · ${f.airline} · ${formattedDeparture} · ${f.type}`
@@ -598,12 +992,15 @@ function FlightsTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[]; h
         const formattedNotes = f.notes ? formatFlightDate(f.notes) : null;
 
         return (
-          <View key={i} style={styles.flightCard}>
+          <View key={i} style={[styles.flightCard, isConfirmed && styles.cardConfirmed]}>
             <View style={styles.flightAvatar}>
               <Text style={styles.flightAvatarText}>{f.member_name?.charAt(0) ?? '?'}</Text>
             </View>
             <View style={styles.flightInfo}>
-              <Text style={styles.flightName}>{f.member_name}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.flightName}>{f.member_name}</Text>
+                {isConfirmed && <CheckCircle size={12} color="#10B981" />}
+              </View>
               <Text style={styles.flightDetails}>{formattedDetails}</Text>
               {formattedNotes ? <Text style={styles.flightNotes}>{formattedNotes}</Text> : null}
             </View>
@@ -612,7 +1009,7 @@ function FlightsTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[]; h
                 <Text style={styles.flightPriceValue}>${f.price_roundtrip}</Text>
                 <Text style={styles.flightPriceLabel}>roundtrip</Text>
               </View>
-              <InlineVote itemId={itemId} helpers={helpers} />
+              <InlineVote itemId={itemId} helpers={helpers} disabled={isFinalized} />
             </View>
           </View>
         );
@@ -621,7 +1018,31 @@ function FlightsTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[]; h
   );
 }
 
-function ItineraryTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[]; helpers: VoteHelpers }) {
+const confirmedHeaderStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  text: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#059669',
+  },
+});
+
+function ItineraryTab({ plan, votes, helpers, isFinalized, confirmedItems }: {
+  plan: TripPlan;
+  votes: Vote[];
+  helpers: VoteHelpers;
+  isFinalized: boolean;
+  confirmedItems: Set<string>;
+}) {
   const allActivities = useMemo(() => {
     const acts: { id: string; name: string; recommended: boolean }[] = [];
     plan.itinerary.forEach((day) => {
@@ -652,17 +1073,26 @@ function ItineraryTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[];
 
   return (
     <View>
-      <TopPicksBanner items={bannerItems} votes={votes} helpers={helpers} category="Activity" />
+      {!isFinalized && (
+        <TopPicksBanner items={bannerItems} votes={votes} helpers={helpers} category="Activity" />
+      )}
+      {isFinalized && (
+        <View style={confirmedHeaderStyles.container}>
+          <CheckCircle size={14} color="#10B981" />
+          <Text style={confirmedHeaderStyles.text}>Itinerary confirmed</Text>
+        </View>
+      )}
       {plan.itinerary.map((day) => (
-        <View key={day.day} style={styles.card}>
+        <View key={day.day} style={[styles.card, isFinalized && styles.cardConfirmed]}>
           <View style={styles.dayHeader}>
-            <View style={styles.dayBadge}>
-              <Text style={styles.dayBadgeText}>{day.day}</Text>
+            <View style={[styles.dayBadge, isFinalized && { backgroundColor: 'rgba(16, 185, 129, 0.1)' }]}>
+              <Text style={[styles.dayBadgeText, isFinalized && { color: '#10B981' }]}>{day.day}</Text>
             </View>
             <View>
               <Text style={styles.dayTitle}>{day.title}</Text>
               <Text style={styles.dayDate}>{formatDisplayDate(day.date) || day.date}</Text>
             </View>
+            {isFinalized && <CheckCircle size={14} color="#10B981" style={{ marginLeft: 'auto' }} />}
           </View>
           <View style={styles.timeline}>
             {(['morning', 'afternoon', 'evening'] as const).map((slot) => {
@@ -683,7 +1113,7 @@ function ItineraryTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[];
                         <Text style={styles.timeSlotCost}>{data.cost}</Text>
                       )}
                     </View>
-                    <InlineVote itemId={itemId} helpers={helpers} />
+                    <InlineVote itemId={itemId} helpers={helpers} disabled={isFinalized} />
                   </View>
                 </View>
               );
@@ -922,6 +1352,17 @@ const styles = StyleSheet.create({
   },
   cardHighlighted: {
     borderColor: Colors.borderOrange,
+  },
+  cardConfirmed: {
+    borderColor: '#10B981',
+    borderWidth: 1.5,
+    backgroundColor: 'rgba(16, 185, 129, 0.03)',
+  },
+  cardGrayed: {
+    opacity: 0.45,
+  },
+  textGrayed: {
+    color: Colors.textDim,
   },
   cardHeader: {
     flexDirection: 'row',

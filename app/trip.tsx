@@ -29,6 +29,7 @@ export default function TripScreen() {
     addDemoMembers,
     generatePlan,
     castVote,
+    finalizePlan,
     setActiveTrip,
     setActiveTripPlan,
   } = useTrips();
@@ -125,13 +126,13 @@ export default function TripScreen() {
               </View>
               <View style={[
                 styles.statusBadge,
-                { backgroundColor: activeTrip.status === 'planned' ? Colors.emeraldMuted : Colors.amberMuted }
+                { backgroundColor: activeTrip.status === 'finalized' ? Colors.emeraldMuted : activeTrip.status === 'planned' ? Colors.emeraldMuted : Colors.amberMuted }
               ]}>
                 <Text style={[
                   styles.statusText,
-                  { color: activeTrip.status === 'planned' ? Colors.emerald : '#D4950A' }
+                  { color: activeTrip.status === 'finalized' ? Colors.emerald : activeTrip.status === 'planned' ? Colors.emerald : '#D4950A' }
                 ]}>
-                  {activeTrip.status === 'planned' ? 'Plan Ready' : 'Collecting'}
+                  {activeTrip.status === 'finalized' ? 'Finalized' : activeTrip.status === 'planned' ? 'Plan Ready' : 'Collecting'}
                 </Text>
               </View>
             </View>
@@ -251,6 +252,8 @@ export default function TripScreen() {
                 currentUserId={currentUser.id}
                 isLeader={isLeader}
                 onVote={castVote}
+                finalized={activeTrip.finalized}
+                onFinalize={finalizePlan}
               />
             )}
           </ScrollView>
