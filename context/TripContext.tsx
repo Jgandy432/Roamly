@@ -270,8 +270,8 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     setGenProgress('Analyzing group preferences...');
     setActiveTripPlan(null);
 
-    const members = activeTrip.members.filter((m) => m.preferencesSubmitted);
-    const memberDetails = members.map((m) => formatMemberPrefs(m)).join('\n\n');
+    const allMembers = activeTrip.members;
+    const memberDetails = allMembers.map((m) => formatMemberPrefs(m)).join('\n\n');
 
     const prompt = `You are Roamly, an AI group trip planner. Generate a complete trip plan based on individual member preferences.
 
