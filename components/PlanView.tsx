@@ -22,10 +22,8 @@ import {
   Compass,
   ThumbsUp,
   ThumbsDown,
-  Crown,
-  Bed,
-  UtensilsCrossed,
-  Activity,
+  Zap,
+  TrendingUp,
 } from 'lucide-react-native';
 import { Colors } from '@/constants/colors';
 import { TripPlan, Vote } from '@/types/trip';
@@ -45,17 +43,309 @@ const TABS = [
   { id: 'flights', label: 'Flights' },
   { id: 'itinerary', label: 'Itinerary' },
   { id: 'food', label: 'Food' },
-  { id: 'votes', label: 'Votes' },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
 
 const TIP_ICONS = [Lightbulb, Star, Compass, Utensils, MapPin];
 
+interface VoteHelpers {
+  getTally: (itemId: string) => { up: number; down: number };
+  getMyVote: (itemId: string) => 'up' | 'down' | null;
+  handleVote: (itemId: string, type: 'up' | 'down') => void;
+  getScale: (itemId: string, type: 'up' | 'down') => Animated.Value;
+}
+
+function useVoteHelpers(votes: Vote[], currentUserId: string, onVote: (itemId: string, vote: 'up' | 'down') => void): VoteHelpers {
+  const scaleAnims = useRef<Record<string, Animated.Value>>({});
+
+  const getScale = useCallback((itemId: string, type: 'up' | 'down') => {
+    const key = `${itemId}-${type}`;
+    if (!scaleAnims.current[key]) {
+      scaleAnims.current[key] = new Animated.Value(1);
+    }
+    return scaleAnims.current[key];
+  }, []);
+
+  const handleVote = useCallback((itemId: string, type: 'up' | 'down') => {
+    const scale = getScale(itemId, type);
+    Animated.sequence([
+      Animated.timing(scale, { toValue: 1.25, duration: 80, useNativeDriver: true }),
+      Animated.timing(scale, { toValue: 1, duration: 80, useNativeDriver: true }),
+    ]).start();
+    onVote(itemId, type);
+  }, [onVote, getScale]);
+
+  const getTally = useCallback((itemId: string) => {
+    const itemVotes = votes.filter((v) => v.itemId === itemId);
+    return {
+      up: itemVotes.filter((v) => v.vote === 'up').length,
+      down: itemVotes.filter((v) => v.vote === 'down').length,
+    };
+  }, [votes]);
+
+  const getMyVote = useCallback((itemId: string): 'up' | 'down' | null => {
+    const v = votes.find((v) => v.itemId === itemId && v.userId === currentUserId);
+    return v?.vote ?? null;
+  }, [votes, currentUserId]);
+
+  return { getTally, getMyVote, handleVote, getScale };
+}
+
+function InlineVote({ itemId, helpers }: { itemId: string; helpers: VoteHelpers }) {
+  const tally = helpers.getTally(itemId);
+  const myVote = helpers.getMyVote(itemId);
+
+  return (
+    <View style={inlineVoteStyles.row}>
+      <TouchableOpacity
+        style={[inlineVoteStyles.btn, myVote === 'up' && inlineVoteStyles.btnUpActive]}
+        onPress={() => helpers.handleVote(itemId, 'up')}
+        activeOpacity={0.7}
+        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      >
+        <Animated.View style={{ transform: [{ scale: helpers.getScale(itemId, 'up') }] }}>
+          <ThumbsUp size={12} color={myVote === 'up' ? '#fff' : '#10B981'} />
+        </Animated.View>
+        <Text style={[inlineVoteStyles.count, myVote === 'up' && inlineVoteStyles.countActive]}>
+          {tally.up}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[inlineVoteStyles.btn, myVote === 'down' && inlineVoteStyles.btnDownActive]}
+        onPress={() => helpers.handleVote(itemId, 'down')}
+        activeOpacity={0.7}
+        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+      >
+        <Animated.View style={{ transform: [{ scale: helpers.getScale(itemId, 'down') }] }}>
+          <ThumbsDown size={12} color={myVote === 'down' ? '#fff' : '#EF4444'} />
+        </Animated.View>
+        <Text style={[inlineVoteStyles.count, myVote === 'down' && inlineVoteStyles.countActive]}>
+          {tally.down}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+const inlineVoteStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    gap: 4,
+    alignItems: 'center',
+  },
+  btn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: 'rgba(0,0,0,0.02)',
+  },
+  btnUpActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  btnDownActive: {
+    backgroundColor: '#EF4444',
+    borderColor: '#EF4444',
+  },
+  count: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: Colors.textMuted,
+  },
+  countActive: {
+    color: '#fff',
+  },
+});
+
+interface TopPickItem {
+  name: string;
+  isTopVoted: boolean;
+  isAiPick: boolean;
+  aiReason: string;
+  upVotes: number;
+}
+
+function TopPicksBanner({ items, votes, helpers, category }: {
+  items: { id: string; name: string; recommended?: boolean; aiReason?: string }[];
+  votes: Vote[];
+  helpers: VoteHelpers;
+  category: string;
+}) {
+  const topPick = useMemo((): TopPickItem | null => {
+    if (items.length === 0) return null;
+
+    let topVotedIdx = -1;
+    let topScore = -Infinity;
+    items.forEach((item, i) => {
+      const tally = helpers.getTally(item.id);
+      const score = tally.up - tally.down;
+      if (tally.up > 0 && score > topScore) {
+        topScore = score;
+        topVotedIdx = i;
+      }
+    });
+
+    const aiPickIdx = items.findIndex((i) => i.recommended);
+    const aiItem = aiPickIdx >= 0 ? items[aiPickIdx] : null;
+    const topItem = topVotedIdx >= 0 ? items[topVotedIdx] : null;
+
+    if (!topItem && !aiItem) return null;
+
+    const isSame = topItem && aiItem && topItem.id === aiItem.id;
+
+    if (isSame) {
+      const tally = helpers.getTally(topItem.id);
+      return {
+        name: topItem.name,
+        isTopVoted: true,
+        isAiPick: true,
+        aiReason: topItem.aiReason || `Best ${category.toLowerCase()} option for your group`,
+        upVotes: tally.up,
+      };
+    }
+
+    if (topItem) {
+      const tally = helpers.getTally(topItem.id);
+      return {
+        name: topItem.name,
+        isTopVoted: true,
+        isAiPick: false,
+        aiReason: '',
+        upVotes: tally.up,
+      };
+    }
+
+    if (aiItem) {
+      return {
+        name: aiItem.name,
+        isTopVoted: false,
+        isAiPick: true,
+        aiReason: aiItem.aiReason || `Best ${category.toLowerCase()} option for your group`,
+        upVotes: 0,
+      };
+    }
+
+    return null;
+  }, [items, votes, helpers, category]);
+
+  if (!topPick) return null;
+
+  return (
+    <View style={bannerStyles.container}>
+      <LinearGradient
+        colors={['#FFF7ED', '#FEF3C7']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={bannerStyles.gradient}
+      >
+        <View style={bannerStyles.header}>
+          <View style={bannerStyles.iconWrap}>
+            <TrendingUp size={13} color="#D97706" />
+          </View>
+          <Text style={bannerStyles.title}>Top Pick</Text>
+          {topPick.isTopVoted && (
+            <View style={bannerStyles.badge}>
+              <ThumbsUp size={9} color="#fff" />
+              <Text style={bannerStyles.badgeText}>Most Voted</Text>
+            </View>
+          )}
+          {topPick.isAiPick && (
+            <View style={[bannerStyles.badge, bannerStyles.aiBadge]}>
+              <Zap size={9} color="#fff" />
+              <Text style={bannerStyles.badgeText}>AI Pick</Text>
+            </View>
+          )}
+        </View>
+        <Text style={bannerStyles.name}>{topPick.name}</Text>
+        {topPick.isAiPick && topPick.aiReason ? (
+          <Text style={bannerStyles.reason}>{topPick.aiReason}</Text>
+        ) : null}
+        {topPick.upVotes > 0 && (
+          <Text style={bannerStyles.voteCount}>{topPick.upVotes} vote{topPick.upVotes !== 1 ? 's' : ''} in favor</Text>
+        )}
+      </LinearGradient>
+    </View>
+  );
+}
+
+const bannerStyles = StyleSheet.create({
+  container: {
+    marginBottom: 14,
+    borderRadius: 14,
+    overflow: 'hidden',
+  },
+  gradient: {
+    padding: 14,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+    flexWrap: 'wrap',
+  },
+  iconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    backgroundColor: 'rgba(217, 119, 6, 0.12)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#92400E',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#10B981',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  aiBadge: {
+    backgroundColor: '#8B5CF6',
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: '#fff',
+  },
+  name: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: '#78350F',
+  },
+  reason: {
+    fontSize: 12,
+    color: '#92400E',
+    marginTop: 3,
+    lineHeight: 17,
+  },
+  voteCount: {
+    fontSize: 11,
+    color: '#A16207',
+    marginTop: 4,
+    fontWeight: '500' as const,
+  },
+});
+
 export default function PlanView({ plan, votes, currentUserId, isLeader, onVote }: PlanViewProps) {
   const [tab, setTab] = useState<TabId>('overview');
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
+  const voteHelpers = useVoteHelpers(votes, currentUserId, onVote);
 
   useEffect(() => {
     fadeAnim.setValue(0);
@@ -83,19 +373,16 @@ export default function PlanView({ plan, votes, currentUserId, isLeader, onVote 
 
       <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
         {tab === 'overview' && plan.summary && <OverviewTab plan={plan} />}
-        {tab === 'lodging' && plan.lodging && <LodgingTab plan={plan} />}
-        {tab === 'flights' && plan.flights && <FlightsTab plan={plan} />}
-        {tab === 'itinerary' && plan.itinerary && <ItineraryTab plan={plan} />}
-        {tab === 'food' && plan.restaurants && <FoodTab plan={plan} />}
-        {tab === 'votes' && (
-          <VotesTab
-            plan={plan}
-            votes={votes}
-            currentUserId={currentUserId}
-            isLeader={isLeader}
-            onVote={onVote}
-          />
+        {tab === 'lodging' && plan.lodging && (
+          <LodgingTab plan={plan} votes={votes} helpers={voteHelpers} />
         )}
+        {tab === 'flights' && plan.flights && (
+          <FlightsTab plan={plan} votes={votes} helpers={voteHelpers} />
+        )}
+        {tab === 'itinerary' && plan.itinerary && (
+          <ItineraryTab plan={plan} votes={votes} helpers={voteHelpers} />
+        )}
+        {tab === 'food' && plan.restaurants && <FoodTab plan={plan} />}
       </Animated.View>
     </View>
   );
@@ -226,38 +513,55 @@ function OverviewTab({ plan }: { plan: TripPlan }) {
   );
 }
 
-function LodgingTab({ plan }: { plan: TripPlan }) {
+function LodgingTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[]; helpers: VoteHelpers }) {
+  const bannerItems = useMemo(() =>
+    plan.lodging.map((l, i) => ({
+      id: `lodging-${i}`,
+      name: l.name,
+      recommended: l.recommended,
+      aiReason: l.recommended ? `Best match for your group's budget and preferences` : undefined,
+    })),
+    [plan.lodging]
+  );
+
   return (
     <View>
-      {plan.lodging.map((l, i) => (
-        <View key={i} style={[styles.card, l.recommended && styles.cardHighlighted]}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderLeft}>
-              <Text style={styles.cardTitle}>{l.name}</Text>
-              <Text style={styles.cardSubtitle}>{l.type} · {l.area}</Text>
+      <TopPicksBanner items={bannerItems} votes={votes} helpers={helpers} category="Lodging" />
+      {plan.lodging.map((l, i) => {
+        const itemId = `lodging-${i}`;
+        return (
+          <View key={i} style={[styles.card, l.recommended && styles.cardHighlighted]}>
+            <View style={styles.cardHeader}>
+              <View style={styles.cardHeaderLeft}>
+                <Text style={styles.cardTitle}>{l.name}</Text>
+                <Text style={styles.cardSubtitle}>{l.type} · {l.area}</Text>
+              </View>
+              <View style={styles.cardHeaderRight}>
+                {l.recommended && (
+                  <View style={styles.recommendedBadge}>
+                    <Text style={styles.recommendedText}>Recommended</Text>
+                  </View>
+                )}
+                <InlineVote itemId={itemId} helpers={helpers} />
+              </View>
             </View>
-            {l.recommended && (
-              <View style={styles.recommendedBadge}>
-                <Text style={styles.recommendedText}>Recommended</Text>
-              </View>
-            )}
+            <Text style={styles.cardDesc}>{l.description}</Text>
+            <View style={styles.tagsRow}>
+              {l.highlights?.map((h, j) => (
+                <View key={j} style={styles.tag}>
+                  <Text style={styles.tagText}>{h}</Text>
+                </View>
+              ))}
+            </View>
+            <View style={styles.cardFooter}>
+              <Text style={styles.priceText}>${l.price_per_night}/night · ${l.price_per_person_per_night}/pp/night</Text>
+              <Text style={l.fits_all_budgets ? styles.fitsBudget : styles.overBudget}>
+                {l.fits_all_budgets ? '✓ Fits all budgets' : '⚠ Over some budgets'}
+              </Text>
+            </View>
           </View>
-          <Text style={styles.cardDesc}>{l.description}</Text>
-          <View style={styles.tagsRow}>
-            {l.highlights?.map((h, j) => (
-              <View key={j} style={styles.tag}>
-                <Text style={styles.tagText}>{h}</Text>
-              </View>
-            ))}
-          </View>
-          <View style={styles.cardFooter}>
-            <Text style={styles.priceText}>${l.price_per_night}/night · ${l.price_per_person_per_night}/pp/night</Text>
-            <Text style={l.fits_all_budgets ? styles.fitsBudget : styles.overBudget}>
-              {l.fits_all_budgets ? '✓ Fits all budgets' : '⚠ Over some budgets'}
-            </Text>
-          </View>
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 }
@@ -271,10 +575,22 @@ function formatFlightDate(text: string): string {
   return result;
 }
 
-function FlightsTab({ plan }: { plan: TripPlan }) {
+function FlightsTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[]; helpers: VoteHelpers }) {
+  const bannerItems = useMemo(() =>
+    plan.flights.map((f, i) => ({
+      id: `flight-${i}`,
+      name: `${f.member_name} — ${f.airline}`,
+      recommended: i === 0,
+      aiReason: i === 0 ? `Best value flight option for the group` : undefined,
+    })),
+    [plan.flights]
+  );
+
   return (
     <View>
+      <TopPicksBanner items={bannerItems} votes={votes} helpers={helpers} category="Flight" />
       {plan.flights.map((f, i) => {
+        const itemId = `flight-${i}`;
         const formattedDeparture = formatFlightDate(f.departure_time ?? '');
         const formattedDetails = formatFlightDate(
           `${f.airport} · ${f.airline} · ${formattedDeparture} · ${f.type}`
@@ -291,9 +607,12 @@ function FlightsTab({ plan }: { plan: TripPlan }) {
               <Text style={styles.flightDetails}>{formattedDetails}</Text>
               {formattedNotes ? <Text style={styles.flightNotes}>{formattedNotes}</Text> : null}
             </View>
-            <View style={styles.flightPrice}>
-              <Text style={styles.flightPriceValue}>${f.price_roundtrip}</Text>
-              <Text style={styles.flightPriceLabel}>roundtrip</Text>
+            <View style={styles.flightRight}>
+              <View style={styles.flightPrice}>
+                <Text style={styles.flightPriceValue}>${f.price_roundtrip}</Text>
+                <Text style={styles.flightPriceLabel}>roundtrip</Text>
+              </View>
+              <InlineVote itemId={itemId} helpers={helpers} />
             </View>
           </View>
         );
@@ -302,9 +621,38 @@ function FlightsTab({ plan }: { plan: TripPlan }) {
   );
 }
 
-function ItineraryTab({ plan }: { plan: TripPlan }) {
+function ItineraryTab({ plan, votes, helpers }: { plan: TripPlan; votes: Vote[]; helpers: VoteHelpers }) {
+  const allActivities = useMemo(() => {
+    const acts: { id: string; name: string; recommended: boolean }[] = [];
+    plan.itinerary.forEach((day) => {
+      (['morning', 'afternoon', 'evening'] as const).forEach((slot) => {
+        const data = day[slot];
+        if (data?.activity) {
+          acts.push({
+            id: `activity-${day.day}-${slot}`,
+            name: data.activity,
+            recommended: false,
+          });
+        }
+      });
+    });
+    if (acts.length > 0) acts[0].recommended = true;
+    return acts;
+  }, [plan.itinerary]);
+
+  const bannerItems = useMemo(() =>
+    allActivities.map((a) => ({
+      id: a.id,
+      name: a.name,
+      recommended: a.recommended,
+      aiReason: a.recommended ? `Top activity recommended for your group` : undefined,
+    })),
+    [allActivities]
+  );
+
   return (
     <View>
+      <TopPicksBanner items={bannerItems} votes={votes} helpers={helpers} category="Activity" />
       {plan.itinerary.map((day) => (
         <View key={day.day} style={styles.card}>
           <View style={styles.dayHeader}>
@@ -320,17 +668,23 @@ function ItineraryTab({ plan }: { plan: TripPlan }) {
             {(['morning', 'afternoon', 'evening'] as const).map((slot) => {
               const data = day[slot];
               if (!data) return null;
+              const itemId = `activity-${day.day}-${slot}`;
               return (
                 <View key={slot} style={styles.timeSlot}>
-                  <View style={styles.timeSlotHeader}>
-                    <Text style={styles.timeSlotTime}>{data.time}</Text>
-                    <Text style={styles.timeSlotLabel}>{slot.toUpperCase()}</Text>
+                  <View style={styles.timeSlotTop}>
+                    <View style={styles.timeSlotContent}>
+                      <View style={styles.timeSlotHeader}>
+                        <Text style={styles.timeSlotTime}>{data.time}</Text>
+                        <Text style={styles.timeSlotLabel}>{slot.toUpperCase()}</Text>
+                      </View>
+                      <Text style={styles.timeSlotActivity}>{data.activity}</Text>
+                      <Text style={styles.timeSlotDesc}>{data.description}</Text>
+                      {data.cost && data.cost !== 'Free' && (
+                        <Text style={styles.timeSlotCost}>{data.cost}</Text>
+                      )}
+                    </View>
+                    <InlineVote itemId={itemId} helpers={helpers} />
                   </View>
-                  <Text style={styles.timeSlotActivity}>{data.activity}</Text>
-                  <Text style={styles.timeSlotDesc}>{data.description}</Text>
-                  {data.cost && data.cost !== 'Free' && (
-                    <Text style={styles.timeSlotCost}>{data.cost}</Text>
-                  )}
                 </View>
               );
             })}
@@ -340,427 +694,6 @@ function ItineraryTab({ plan }: { plan: TripPlan }) {
     </View>
   );
 }
-
-interface VotesTabProps {
-  plan: TripPlan;
-  votes: Vote[];
-  currentUserId: string;
-  isLeader: boolean;
-  onVote: (itemId: string, vote: 'up' | 'down') => void;
-}
-
-interface VoteableItem {
-  id: string;
-  name: string;
-  subtitle: string;
-  category: 'lodging' | 'activity' | 'restaurant';
-}
-
-function extractVoteableItems(plan: TripPlan): VoteableItem[] {
-  const items: VoteableItem[] = [];
-  plan.lodging?.slice(0, 3).forEach((l, i) => {
-    items.push({
-      id: `lodging-${i}`,
-      name: l.name,
-      subtitle: `${l.type} · ${l.price_per_night}/night`,
-      category: 'lodging',
-    });
-  });
-  const activities: { name: string; day: number }[] = [];
-  plan.itinerary?.forEach((day) => {
-    (['morning', 'afternoon', 'evening'] as const).forEach((slot) => {
-      const data = day[slot];
-      if (data?.activity) {
-        activities.push({ name: data.activity, day: day.day });
-      }
-    });
-  });
-  const seen = new Set<string>();
-  activities.forEach((a) => {
-    const key = a.name.toLowerCase();
-    if (!seen.has(key) && items.filter((x) => x.category === 'activity').length < 5) {
-      seen.add(key);
-      items.push({
-        id: `activity-${items.length}`,
-        name: a.name,
-        subtitle: `Day ${a.day}`,
-        category: 'activity',
-      });
-    }
-  });
-  plan.restaurants?.slice(0, 3).forEach((r, i) => {
-    items.push({
-      id: `restaurant-${i}`,
-      name: r.name,
-      subtitle: `${r.cuisine} · ${r.price_range}`,
-      category: 'restaurant',
-    });
-  });
-  return items;
-}
-
-function VotesTab({ plan, votes, currentUserId, isLeader, onVote }: VotesTabProps) {
-  const items = useMemo(() => extractVoteableItems(plan), [plan]);
-  const scaleAnims = useRef<Record<string, Animated.Value>>({});
-
-  const getScale = useCallback((itemId: string, type: 'up' | 'down') => {
-    const key = `${itemId}-${type}`;
-    if (!scaleAnims.current[key]) {
-      scaleAnims.current[key] = new Animated.Value(1);
-    }
-    return scaleAnims.current[key];
-  }, []);
-
-  const handleVote = useCallback((itemId: string, type: 'up' | 'down') => {
-    const scale = getScale(itemId, type);
-    Animated.sequence([
-      Animated.timing(scale, { toValue: 1.3, duration: 100, useNativeDriver: true }),
-      Animated.timing(scale, { toValue: 1, duration: 100, useNativeDriver: true }),
-    ]).start();
-    onVote(itemId, type);
-  }, [onVote, getScale]);
-
-  const getTally = useCallback((itemId: string) => {
-    const itemVotes = votes.filter((v) => v.itemId === itemId);
-    return {
-      up: itemVotes.filter((v) => v.vote === 'up').length,
-      down: itemVotes.filter((v) => v.vote === 'down').length,
-    };
-  }, [votes]);
-
-  const getMyVote = useCallback((itemId: string): 'up' | 'down' | null => {
-    const v = votes.find((v) => v.itemId === itemId && v.userId === currentUserId);
-    return v?.vote ?? null;
-  }, [votes, currentUserId]);
-
-  const categoryIcon = (cat: 'lodging' | 'activity' | 'restaurant') => {
-    switch (cat) {
-      case 'lodging': return Bed;
-      case 'activity': return Activity;
-      case 'restaurant': return UtensilsCrossed;
-    }
-  };
-
-  const categoryLabel = (cat: 'lodging' | 'activity' | 'restaurant') => {
-    switch (cat) {
-      case 'lodging': return 'Lodging Options';
-      case 'activity': return 'Top Activities';
-      case 'restaurant': return 'Restaurant Picks';
-    }
-  };
-
-  const groupedItems = useMemo(() => {
-    const groups: { category: 'lodging' | 'activity' | 'restaurant'; items: VoteableItem[] }[] = [];
-    const cats: ('lodging' | 'activity' | 'restaurant')[] = ['lodging', 'activity', 'restaurant'];
-    cats.forEach((cat) => {
-      const catItems = items.filter((i) => i.category === cat);
-      if (catItems.length > 0) groups.push({ category: cat, items: catItems });
-    });
-    return groups;
-  }, [items]);
-
-  const topPicks = useMemo(() => {
-    if (!isLeader) return [];
-    return items
-      .map((item) => {
-        const tally = getTally(item.id);
-        return { ...item, up: tally.up, down: tally.down, score: tally.up - tally.down };
-      })
-      .filter((item) => item.up > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
-  }, [items, isLeader, getTally]);
-
-  return (
-    <View>
-      {isLeader && topPicks.length > 0 && (
-        <View style={voteStyles.leaderCard}>
-          <View style={voteStyles.leaderHeader}>
-            <Crown size={16} color="#F59E0B" />
-            <Text style={voteStyles.leaderTitle}>Group Favorites</Text>
-          </View>
-          <Text style={voteStyles.leaderSubtitle}>Based on your group&apos;s votes</Text>
-          {topPicks.map((item, i) => (
-            <View key={item.id} style={voteStyles.topPickRow}>
-              <View style={voteStyles.topPickRank}>
-                <Text style={voteStyles.topPickRankText}>{i + 1}</Text>
-              </View>
-              <View style={voteStyles.topPickInfo}>
-                <Text style={voteStyles.topPickName}>{item.name}</Text>
-                <Text style={voteStyles.topPickMeta}>{item.subtitle}</Text>
-              </View>
-              <View style={voteStyles.topPickScore}>
-                <ThumbsUp size={12} color="#10B981" />
-                <Text style={voteStyles.topPickScoreText}>{item.up}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-
-      {groupedItems.map((group) => {
-        const CatIcon = categoryIcon(group.category);
-        return (
-          <View key={group.category} style={voteStyles.section}>
-            <View style={voteStyles.sectionHeader}>
-              <CatIcon size={16} color="#FF6B4A" />
-              <Text style={voteStyles.sectionTitle}>{categoryLabel(group.category)}</Text>
-            </View>
-            {group.items.map((item) => {
-              const tally = getTally(item.id);
-              const myVote = getMyVote(item.id);
-              const totalVotes = tally.up + tally.down;
-              const upPct = totalVotes > 0 ? (tally.up / totalVotes) * 100 : 50;
-
-              return (
-                <View key={item.id} style={voteStyles.voteCard}>
-                  <View style={voteStyles.voteCardTop}>
-                    <View style={voteStyles.voteCardInfo}>
-                      <Text style={voteStyles.voteCardName}>{item.name}</Text>
-                      <Text style={voteStyles.voteCardSub}>{item.subtitle}</Text>
-                    </View>
-                    <View style={voteStyles.voteButtons}>
-                      <TouchableOpacity
-                        style={[
-                          voteStyles.voteBtn,
-                          voteStyles.voteBtnUp,
-                          myVote === 'up' && voteStyles.voteBtnUpActive,
-                        ]}
-                        onPress={() => handleVote(item.id, 'up')}
-                        activeOpacity={0.7}
-                      >
-                        <Animated.View style={{ transform: [{ scale: getScale(item.id, 'up') }] }}>
-                          <ThumbsUp size={14} color={myVote === 'up' ? '#FFFFFF' : '#10B981'} />
-                        </Animated.View>
-                        <Text style={[
-                          voteStyles.voteBtnCount,
-                          myVote === 'up' && voteStyles.voteBtnCountActive,
-                        ]}>{tally.up}</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[
-                          voteStyles.voteBtn,
-                          voteStyles.voteBtnDown,
-                          myVote === 'down' && voteStyles.voteBtnDownActive,
-                        ]}
-                        onPress={() => handleVote(item.id, 'down')}
-                        activeOpacity={0.7}
-                      >
-                        <Animated.View style={{ transform: [{ scale: getScale(item.id, 'down') }] }}>
-                          <ThumbsDown size={14} color={myVote === 'down' ? '#FFFFFF' : '#EF4444'} />
-                        </Animated.View>
-                        <Text style={[
-                          voteStyles.voteBtnCount,
-                          myVote === 'down' && voteStyles.voteBtnCountActive,
-                        ]}>{tally.down}</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                  {totalVotes > 0 && (
-                    <View style={voteStyles.tallyBar}>
-                      <View style={[voteStyles.tallyFillUp, { width: `${upPct}%` }]} />
-                      <View style={[voteStyles.tallyFillDown, { width: `${100 - upPct}%` }]} />
-                    </View>
-                  )}
-                </View>
-              );
-            })}
-          </View>
-        );
-      })}
-
-      {items.length === 0 && (
-        <View style={voteStyles.emptyState}>
-          <ThumbsUp size={32} color={Colors.textDim} />
-          <Text style={voteStyles.emptyText}>No items to vote on yet</Text>
-          <Text style={voteStyles.emptySubtext}>Generate a trip plan to start voting</Text>
-        </View>
-      )}
-    </View>
-  );
-}
-
-const voteStyles = StyleSheet.create({
-  leaderCard: {
-    backgroundColor: '#FFFBEB',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.2)',
-  },
-  leaderHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  leaderTitle: {
-    fontSize: 16,
-    fontWeight: '700' as const,
-    color: Colors.text,
-  },
-  leaderSubtitle: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginBottom: 14,
-  },
-  topPickRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(245, 158, 11, 0.1)',
-    gap: 10,
-  },
-  topPickRank: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  topPickRankText: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: '#D97706',
-  },
-  topPickInfo: {
-    flex: 1,
-  },
-  topPickName: {
-    fontSize: 13,
-    fontWeight: '600' as const,
-    color: Colors.text,
-  },
-  topPickMeta: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    marginTop: 1,
-  },
-  topPickScore: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  topPickScoreText: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: '#10B981',
-  },
-  section: {
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '700' as const,
-    color: Colors.text,
-  },
-  voteCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  voteCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  voteCardInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  voteCardName: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.text,
-  },
-  voteCardSub: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    marginTop: 2,
-  },
-  voteButtons: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  voteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-  },
-  voteBtnUp: {
-    backgroundColor: 'rgba(16, 185, 129, 0.06)',
-    borderColor: 'rgba(16, 185, 129, 0.2)',
-  },
-  voteBtnUpActive: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
-  },
-  voteBtnDown: {
-    backgroundColor: 'rgba(239, 68, 68, 0.06)',
-    borderColor: 'rgba(239, 68, 68, 0.2)',
-  },
-  voteBtnDownActive: {
-    backgroundColor: '#EF4444',
-    borderColor: '#EF4444',
-  },
-  voteBtnCount: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: Colors.textSecondary,
-  },
-  voteBtnCountActive: {
-    color: '#FFFFFF',
-  },
-  tallyBar: {
-    flexDirection: 'row',
-    height: 4,
-    borderRadius: 2,
-    overflow: 'hidden',
-    marginTop: 10,
-  },
-  tallyFillUp: {
-    backgroundColor: '#10B981',
-    height: 4,
-    borderTopLeftRadius: 2,
-    borderBottomLeftRadius: 2,
-  },
-  tallyFillDown: {
-    backgroundColor: '#EF4444',
-    height: 4,
-    borderTopRightRadius: 2,
-    borderBottomRightRadius: 2,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 40,
-    gap: 8,
-  },
-  emptyText: {
-    fontSize: 15,
-    fontWeight: '600' as const,
-    color: Colors.textMuted,
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: Colors.textDim,
-  },
-});
 
 function FoodTab({ plan }: { plan: TripPlan }) {
   return (
@@ -997,6 +930,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   cardHeaderLeft: { flex: 1 },
+  cardHeaderRight: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
   cardTitle: { fontSize: 15, fontWeight: '600' as const, color: Colors.text },
   cardSubtitle: { fontSize: 12, color: Colors.textMuted, marginTop: 2 },
   recommendedBadge: {
@@ -1051,6 +988,10 @@ const styles = StyleSheet.create({
   flightName: { fontSize: 14, fontWeight: '600' as const, color: Colors.text },
   flightDetails: { fontSize: 11, color: Colors.textMuted, marginTop: 2, lineHeight: 16 },
   flightNotes: { fontSize: 11, color: Colors.textDim, marginTop: 3, lineHeight: 16 },
+  flightRight: {
+    alignItems: 'flex-end',
+    gap: 6,
+  },
   flightPrice: { alignItems: 'flex-end' },
   flightPriceValue: { fontSize: 16, fontWeight: '700' as const, color: '#FF6B4A' },
   flightPriceLabel: { fontSize: 10, color: Colors.textDim },
@@ -1075,6 +1016,15 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   timeSlot: {},
+  timeSlotTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  timeSlotContent: {
+    flex: 1,
+  },
   timeSlotHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
   timeSlotTime: { fontSize: 11, color: Colors.orangeLight, fontWeight: '500' as const },
   timeSlotLabel: { fontSize: 10, color: Colors.textDim, letterSpacing: 1 },
