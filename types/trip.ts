@@ -24,12 +24,17 @@ export interface UserPreferences {
   dealBreaker: string;
 }
 
+export type TripMemberRole = 'owner' | 'editor' | 'viewer';
+export type TripStatus = 'collecting' | 'planned' | 'finalized' | 'completed';
+
 export interface TripMember {
   id: string;
+  userId: string;
   name: string;
   email: string;
   avatar: string;
-  role: 'leader' | 'member';
+  role: TripMemberRole;
+  joinedAt: string;
   preferencesSubmitted: boolean;
   preferences?: UserPreferences;
 }
@@ -40,6 +45,12 @@ export interface AppUser {
   name: string;
   avatar: string;
   hasCompletedOnboarding: boolean;
+  createdAt: string;
+}
+
+export interface AuthSession {
+  token: string;
+  user: AppUser;
 }
 
 export interface TimeSlot {
@@ -113,6 +124,9 @@ export interface TripData {
   destination: string;
   groupSize: number;
   constraints: string;
+  startDate?: string;
+  endDate?: string;
+  description?: string;
 }
 
 export interface Vote {
@@ -128,15 +142,29 @@ export interface FinalizedChoices {
   summary: string;
 }
 
+export interface TripInvite {
+  id: string;
+  tripId: string;
+  email: string;
+  role: TripMemberRole;
+  inviteToken: string;
+  status: 'pending' | 'accepted' | 'revoked';
+  createdAt: string;
+  inviteLink?: string;
+}
+
 export interface Trip extends TripData {
   id: string;
-  inviteCode: string;
-  leaderId: string;
-  leaderName: string;
-  members: TripMember[];
-  status: 'collecting' | 'planned' | 'finalized' | 'completed';
+  createdBy: string;
   createdAt: string;
+  members: TripMember[];
+  invites: TripInvite[];
+  status: TripStatus;
   plan: TripPlan | null;
   votes: Vote[];
   finalized?: FinalizedChoices;
+}
+
+export interface AuthResponse {
+  session: AuthSession;
 }

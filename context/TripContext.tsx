@@ -4,12 +4,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateObject } from '@rork-ai/toolkit-sdk';
 import { z } from 'zod';
-import { Trip, TripData, TripPlan, TripMember, AppUser, UserPreferences, Vote, FinalizedChoices } from '@/types/trip';
-import { generateId, generateInviteCode } from '@/utils/helpers';
-import { generateFallbackPlan } from '@/utils/fallback-plan';
 
-const STORAGE_KEY_USER = 'roamly_user';
-const STORAGE_KEY_TRIPS = 'roamly_trips';
+import { api } from '@/services/api';
+import { generateFallbackPlan } from '@/utils/fallback-plan';
+import { AppUser, AuthSession, FinalizedChoices, Trip, TripData, TripMember, TripPlan, TripMemberRole, UserPreferences } from '@/types/trip';
+
+const STORAGE_KEY_SESSION = 'roamly_session';
 
 const tripPlanSchema = z.object({
   summary: z.object({
@@ -60,438 +60,386 @@ const tripPlanSchema = z.object({
   pro_tips: z.array(z.string()),
 });
 
-function formatMemberPrefs(m: TripMember): string {
-  const p = m.preferences;
-  if (!p) return `- ${m.name}: No preferences submitted`;
-  const lines: string[] = [`- ${m.name}:`];
-  if (p.availableDates?.length) lines.push(`  Available dates: ${p.availableDates.join(', ')}`);
-  if (p.flightAirport) lines.push(`  Airport: ${p.flightAirport}`);
-  if (p.flightNonstop) lines.push(`  Nonstop preference: ${p.flightNonstop}`);
-  if (p.flightDepartTime) lines.push(`  Departure time: ${p.flightDepartTime}`);
-  if (p.flightBudget) lines.push(`  Flight budget: $${p.flightBudget}`);
-  if (p.accommodationType) lines.push(`  Accommodation: ${p.accommodationType}`);
-  if (p.accommodationNightlyBudget) lines.push(`  Nightly budget: $${p.accommodationNightlyBudget}/person`);
-  if (p.accommodationMustHaves?.length) lines.push(`  Accommodation must-haves: ${p.accommodationMustHaves.join(', ')}`);
-  if (p.needsRentalCar) lines.push(`  Rental car: ${p.needsRentalCar}`);
-  if (p.isDriver) lines.push(`  Is driver: ${p.isDriver}`);
-  if (p.vehiclePreference) lines.push(`  Vehicle preference: ${p.vehiclePreference}`);
-  if (p.activityInterests?.length) lines.push(`  Activity interests: ${p.activityInterests.join(', ')}`);
-  if (p.activityDailyBudget) lines.push(`  Daily activity budget: $${p.activityDailyBudget}`);
-  if (p.activityMustDo) lines.push(`  Must-do: ${p.activityMustDo}`);
-  if (p.activityWontDo) lines.push(`  Won't do: ${p.activityWontDo}`);
-  if (p.diningStyle) lines.push(`  Dining style: ${p.diningStyle}`);
-  if (p.dietaryRestrictions?.length) lines.push(`  Dietary restrictions: ${p.dietaryRestrictions.join(', ')}`);
-  if (p.foodDailyBudget) lines.push(`  Daily food budget: $${p.foodDailyBudget}/person`);
-  if (p.foodMustHaves?.length) lines.push(`  Food priorities: ${p.foodMustHaves.join(', ')}`);
-  if (p.totalBudget) lines.push(`  Total trip budget: $${p.totalBudget}/person`);
-  if (p.budgetFlexibility) lines.push(`  Budget flexibility: ${p.budgetFlexibility}`);
-  if (p.mustHave) lines.push(`  Must have: ${p.mustHave}`);
-  if (p.dealBreaker) lines.push(`  Deal breaker: ${p.dealBreaker}`);
+function formatMemberPrefs(member: TripMember): string {
+  const prefs = member.preferences;
+  if (!prefs) {
+    return `- ${member.name}: No preferences submitted`;
+  }
+
+  const lines: string[] = [`- ${member.name}:`];
+  if (prefs.availableDates.length) lines.push(`  Available dates: ${prefs.availableDates.join(', ')}`);
+  if (prefs.flightAirport) lines.push(`  Airport: ${prefs.flightAirport}`);
+  if (prefs.flightNonstop) lines.push(`  Nonstop preference: ${prefs.flightNonstop}`);
+  if (prefs.flightDepartTime) lines.push(`  Departure time: ${prefs.flightDepartTime}`);
+  if (prefs.flightBudget) lines.push(`  Flight budget: $${prefs.flightBudget}`);
+  if (prefs.accommodationType) lines.push(`  Accommodation: ${prefs.accommodationType}`);
+  if (prefs.accommodationNightlyBudget) lines.push(`  Nightly budget: $${prefs.accommodationNightlyBudget}/person`);
+  if (prefs.accommodationMustHaves.length) lines.push(`  Accommodation must-haves: ${prefs.accommodationMustHaves.join(', ')}`);
+  if (prefs.activityInterests.length) lines.push(`  Activity interests: ${prefs.activityInterests.join(', ')}`);
+  if (prefs.activityDailyBudget) lines.push(`  Daily activity budget: $${prefs.activityDailyBudget}`);
+  if (prefs.dietaryRestrictions.length) lines.push(`  Dietary restrictions: ${prefs.dietaryRestrictions.join(', ')}`);
+  if (prefs.foodDailyBudget) lines.push(`  Daily food budget: $${prefs.foodDailyBudget}`);
+  if (prefs.totalBudget) lines.push(`  Total trip budget: $${prefs.totalBudget}`);
+  if (prefs.mustHave) lines.push(`  Must have: ${prefs.mustHave}`);
+  if (prefs.dealBreaker) lines.push(`  Deal breaker: ${prefs.dealBreaker}`);
   return lines.join('\n');
+}
+
+function pickTripById(trips: Trip[], tripId: string | null): Trip | null {
+  if (!tripId) return null;
+  return trips.find((trip) => trip.id === tripId) ?? null;
 }
 
 export const [TripProvider, useTrips] = createContextHook(() => {
   const queryClient = useQueryClient();
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
-  const [activeTrip, setActiveTrip] = useState<Trip | null>(null);
+  const [activeTripId, setActiveTripId] = useState<string | null>(null);
   const [activeTripPlan, setActiveTripPlan] = useState<TripPlan | null>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [genProgress, setGenProgress] = useState<string>('');
 
-  const userQuery = useQuery({
-    queryKey: ['user'],
+  const sessionQuery = useQuery({
+    queryKey: ['auth-session'],
     queryFn: async () => {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY_USER);
-      return stored ? JSON.parse(stored) as AppUser : null;
+      const stored = await AsyncStorage.getItem(STORAGE_KEY_SESSION);
+      return stored ? JSON.parse(stored) as AuthSession : null;
     },
   });
 
+  useEffect(() => {
+    if (sessionQuery.data) {
+      console.log('Hydrating saved session', { userId: sessionQuery.data.user.id, email: sessionQuery.data.user.email });
+      setSession(sessionQuery.data);
+      setCurrentUser(sessionQuery.data.user);
+    }
+  }, [sessionQuery.data]);
+
   const tripsQuery = useQuery({
-    queryKey: ['trips'],
+    queryKey: ['trips', session?.token ?? 'guest'],
+    enabled: !!session?.token,
     queryFn: async () => {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY_TRIPS);
-      return stored ? JSON.parse(stored) as Trip[] : [];
+      if (!session?.token) return [] as Trip[];
+      const response = await api.listTrips(session.token);
+      return response.trips;
     },
   });
 
   const trips = useMemo<Trip[]>(() => tripsQuery.data ?? [], [tripsQuery.data]);
+  const activeTrip = useMemo<Trip | null>(() => pickTripById(trips, activeTripId), [activeTripId, trips]);
 
   useEffect(() => {
-    if (userQuery.data && !currentUser) {
-      console.log('Hydrating stored user', {
-        email: userQuery.data.email,
-        hasCompletedOnboarding: userQuery.data.hasCompletedOnboarding,
-      });
-      setCurrentUser(userQuery.data);
+    if (activeTrip?.plan) {
+      setActiveTripPlan(activeTrip.plan);
     }
-  }, [currentUser, userQuery.data]);
+  }, [activeTrip]);
 
-  const saveUser = useMutation({
-    mutationFn: async (user: AppUser) => {
-      await AsyncStorage.setItem(STORAGE_KEY_USER, JSON.stringify(user));
-      return user;
+  const persistSession = useCallback(async (nextSession: AuthSession | null) => {
+    if (nextSession) {
+      await AsyncStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(nextSession));
+    } else {
+      await AsyncStorage.removeItem(STORAGE_KEY_SESSION);
+    }
+  }, []);
+
+  const authMutation = useMutation({
+    mutationFn: async (input: { mode: 'login' | 'signup'; name?: string; email: string; password: string }) => {
+      if (input.mode === 'signup') {
+        return api.signup({ name: input.name ?? '', email: input.email, password: input.password });
+      }
+      return api.login({ email: input.email, password: input.password });
     },
-    onSuccess: (user) => {
+    onSuccess: async (response) => {
+      console.log('Auth success', { userId: response.session.user.id, email: response.session.user.email });
+      setSession(response.session);
+      setCurrentUser(response.session.user);
+      await persistSession(response.session);
+      queryClient.setQueryData(['auth-session'], response.session);
+      void queryClient.invalidateQueries({ queryKey: ['trips'] });
+    },
+  });
+
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      if (session?.token) {
+        await api.logout(session.token);
+      }
+      return true;
+    },
+    onSuccess: async () => {
+      console.log('Logging out current user');
+      setSession(null);
+      setCurrentUser(null);
+      setActiveTripId(null);
+      setActiveTripPlan(null);
+      await persistSession(null);
+      queryClient.setQueryData(['auth-session'], null);
+      queryClient.setQueryData(['trips', 'guest'], []);
+      void queryClient.invalidateQueries({ queryKey: ['trips'] });
+    },
+  });
+
+  const createTripMutation = useMutation({
+    mutationFn: async (tripData: TripData) => {
+      if (!session?.token) throw new Error('Not logged in');
+      return api.createTrip(session.token, tripData);
+    },
+    onSuccess: ({ trip }) => {
+      setActiveTripId(trip.id);
+      setActiveTripPlan(trip.plan);
+      void queryClient.invalidateQueries({ queryKey: ['trips'] });
+    },
+  });
+
+  const savePreferencesMutation = useMutation({
+    mutationFn: async (preferences: UserPreferences) => {
+      if (!session?.token || !activeTripId) throw new Error('No active trip');
+      return api.savePreferences(session.token, activeTripId, preferences);
+    },
+    onSuccess: ({ trip }) => {
+      setActiveTripId(trip.id);
+      setActiveTripPlan(trip.plan);
+      void queryClient.invalidateQueries({ queryKey: ['trips'] });
+    },
+  });
+
+  const savePlanMutation = useMutation({
+    mutationFn: async (plan: TripPlan) => {
+      if (!session?.token || !activeTripId) throw new Error('No active trip');
+      return api.savePlan(session.token, activeTripId, plan);
+    },
+    onSuccess: ({ trip }) => {
+      setActiveTripId(trip.id);
+      setActiveTripPlan(trip.plan);
+      void queryClient.invalidateQueries({ queryKey: ['trips'] });
+    },
+  });
+
+  const voteMutation = useMutation({
+    mutationFn: async (input: { itemId: string; vote: 'up' | 'down' }) => {
+      if (!session?.token || !activeTripId) throw new Error('No active trip');
+      return api.vote(session.token, activeTripId, input.itemId, input.vote);
+    },
+    onSuccess: ({ trip }) => {
+      setActiveTripId(trip.id);
+      void queryClient.invalidateQueries({ queryKey: ['trips'] });
+    },
+  });
+
+  const finalizeMutation = useMutation({
+    mutationFn: async (finalized: FinalizedChoices) => {
+      if (!session?.token || !activeTripId) throw new Error('No active trip');
+      return api.finalize(session.token, activeTripId, finalized);
+    },
+    onSuccess: ({ trip }) => {
+      setActiveTripId(trip.id);
+      setActiveTripPlan(trip.plan);
+      void queryClient.invalidateQueries({ queryKey: ['trips'] });
+    },
+  });
+
+  const inviteMutation = useMutation({
+    mutationFn: async (input: { email: string; role: TripMemberRole }) => {
+      if (!session?.token || !activeTripId) throw new Error('No active trip');
+      return api.invite(session.token, activeTripId, input.email, input.role);
+    },
+    onSuccess: ({ trip }) => {
+      setActiveTripId(trip.id);
+      void queryClient.invalidateQueries({ queryKey: ['trips'] });
+    },
+  });
+
+  const onboardingMutation = useMutation({
+    mutationFn: async () => {
+      if (!session?.token) throw new Error('Not logged in');
+      return api.completeOnboarding(session.token);
+    },
+    onSuccess: async ({ user }) => {
+      const nextSession = session ? { ...session, user } : null;
       setCurrentUser(user);
-      queryClient.setQueryData(['user'], user);
+      if (nextSession) {
+        setSession(nextSession);
+        await persistSession(nextSession);
+        queryClient.setQueryData(['auth-session'], nextSession);
+      }
     },
   });
 
-  const saveTrips = useMutation({
-    mutationFn: async (updatedTrips: Trip[]) => {
-      await AsyncStorage.setItem(STORAGE_KEY_TRIPS, JSON.stringify(updatedTrips));
-      return updatedTrips;
-    },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['trips'], data);
-    },
-  });
+  const login = useCallback(async (email: string, password: string) => {
+    const response = await authMutation.mutateAsync({ mode: 'login', email, password });
+    return response.session.user;
+  }, [authMutation]);
 
-  const login = useCallback((email: string, name: string, options?: { hasCompletedOnboarding?: boolean }) => {
-    const existingUser = trips.flatMap((trip) => trip.members).find((member) => member.email.toLowerCase() === email.toLowerCase());
-    const user: AppUser = {
-      id: existingUser?.id ?? generateId(),
-      email,
-      name,
-      avatar: name.charAt(0).toUpperCase(),
-      hasCompletedOnboarding: options?.hasCompletedOnboarding ?? existingUser?.id !== undefined,
-    };
-    console.log('Logging in user', { email, name, hasCompletedOnboarding: user.hasCompletedOnboarding });
-    saveUser.mutate(user);
-    return user;
-  }, [saveUser, trips]);
+  const signup = useCallback(async (name: string, email: string, password: string) => {
+    const response = await authMutation.mutateAsync({ mode: 'signup', name, email, password });
+    return response.session.user;
+  }, [authMutation]);
 
   const logout = useCallback(() => {
-    console.log('Logging out current user');
-    setCurrentUser(null);
-    void AsyncStorage.removeItem(STORAGE_KEY_USER);
-    queryClient.setQueryData(['user'], null);
-  }, [queryClient]);
+    logoutMutation.mutate();
+  }, [logoutMutation]);
 
-  const createTrip = useCallback((tripData: TripData): Trip => {
-    if (!currentUser) throw new Error('Not logged in');
-    const newTrip: Trip = {
-      ...tripData,
-      id: generateId(),
-      inviteCode: generateInviteCode(),
-      leaderId: currentUser.id,
-      leaderName: currentUser.name,
-      members: [{
-        id: currentUser.id,
-        name: currentUser.name,
-        email: currentUser.email,
-        avatar: currentUser.avatar,
-        role: 'leader',
-        preferencesSubmitted: false,
-      }],
-      status: 'collecting',
-      createdAt: new Date().toISOString(),
-      plan: null,
-      votes: [],
-    };
-    const updated = [...trips, newTrip];
-    saveTrips.mutate(updated);
-    setActiveTrip(newTrip);
-    return newTrip;
-  }, [currentUser, saveTrips, trips]);
+  const createTrip = useCallback(async (tripData: TripData) => {
+    const response = await createTripMutation.mutateAsync(tripData);
+    return response.trip;
+  }, [createTripMutation]);
 
-  const joinTrip = useCallback((code: string): { success: boolean; message: string } => {
-    if (!currentUser) return { success: false, message: 'Not logged in' };
-    const trip = trips.find((t) => t.inviteCode === code);
-    if (!trip) return { success: false, message: 'Invalid invite code' };
-    if (trip.members.find((m) => m.id === currentUser.id)) {
-      return { success: false, message: "You're already in this trip!" };
-    }
-    const updatedTrip: Trip = {
-      ...trip,
-      members: [...trip.members, {
-        id: currentUser.id,
-        name: currentUser.name,
-        email: currentUser.email,
-        avatar: currentUser.avatar,
-        role: 'member',
-        preferencesSubmitted: false,
-      }],
-    };
-    const updated = trips.map((t) => (t.id === trip.id ? updatedTrip : t));
-    saveTrips.mutate(updated);
-    setActiveTrip(updatedTrip);
-    return { success: true, message: `Joined "${trip.name}"!` };
-  }, [currentUser, saveTrips, trips]);
-
-  const submitPreferences = useCallback((prefs: UserPreferences) => {
-    if (!activeTrip || !currentUser) return;
-    const updatedMembers = activeTrip.members.map((m) =>
-      m.id === currentUser.id ? { ...m, preferencesSubmitted: true, preferences: prefs } : m
-    );
-    const updatedTrip: Trip = { ...activeTrip, members: updatedMembers };
-    const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
-    saveTrips.mutate(updated);
-    setActiveTrip(updatedTrip);
-  }, [activeTrip, currentUser, saveTrips, trips]);
-
-  const addDemoMembers = useCallback(() => {
-    if (!activeTrip) return;
-    const demoPrefs: UserPreferences = {
-      availableDates: ['2026-11-14', '2026-11-15', '2026-11-16', '2026-11-17', '2026-11-18'],
-      flightAirport: "ORD - Chicago O'Hare",
-      flightNonstop: 'Layovers ok',
-      flightDepartTime: 'Morning',
-      flightBudget: 500,
-      accommodationType: 'Airbnb',
-      accommodationNightlyBudget: 100,
-      accommodationMustHaves: ['Pool', 'Kitchen'],
-      needsRentalCar: 'Maybe',
-      isDriver: 'Yes',
-      vehiclePreference: 'Standard',
-      activityInterests: ['Food tours', 'Culture', 'Nightlife'],
-      activityDailyBudget: 80,
-      activityMustDo: 'Street food tour',
-      activityWontDo: '',
-      diningStyle: 'Mid-range',
-      dietaryRestrictions: ['None'],
-      foodDailyBudget: 60,
-      foodMustHaves: ['Local spots', 'Food markets'],
-      totalBudget: 2000,
-      budgetFlexibility: 'A little flexible',
-      mustHave: 'At least one beach day',
-      dealBreaker: '',
-    };
-    const demoMembers: TripMember[] = [
-      { id: generateId(), name: 'Sarah K.', email: 'sarah@demo.com', avatar: 'S', role: 'member', preferencesSubmitted: true,
-        preferences: { ...demoPrefs, flightAirport: "ORD - Chicago O'Hare", activityInterests: ['Relaxation', 'Shopping', 'Wellness'], totalBudget: 1500, diningStyle: 'Casual' } },
-      { id: generateId(), name: 'Mike R.', email: 'mike@demo.com', avatar: 'M', role: 'member', preferencesSubmitted: true,
-        preferences: { ...demoPrefs, flightAirport: 'LAX - Los Angeles', activityInterests: ['Nightlife', 'Adventure', 'Food tours'], totalBudget: 2500, diningStyle: 'Mix' } },
-      { id: generateId(), name: 'Dan P.', email: 'dan@demo.com', avatar: 'D', role: 'member', preferencesSubmitted: true,
-        preferences: { ...demoPrefs, flightAirport: 'EWR - Newark', activityInterests: ['Nature', 'Culture', 'Food tours'], totalBudget: 1200, budgetFlexibility: 'Strict' } },
-      { id: generateId(), name: 'Jess T.', email: 'jess@demo.com', avatar: 'J', role: 'member', preferencesSubmitted: true,
-        preferences: { ...demoPrefs, flightAirport: 'BOS - Boston Logan', activityInterests: ['Relaxation', 'Nightlife', 'Wellness'], totalBudget: 1800 } },
-    ];
-    const updatedTrip: Trip = { ...activeTrip, members: [...activeTrip.members, ...demoMembers] };
-    const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
-    saveTrips.mutate(updated);
-    setActiveTrip(updatedTrip);
-  }, [activeTrip, saveTrips, trips]);
+  const submitPreferences = useCallback(async (preferences: UserPreferences) => {
+    await savePreferencesMutation.mutateAsync(preferences);
+  }, [savePreferencesMutation]);
 
   const castVote = useCallback((itemId: string, vote: 'up' | 'down') => {
-    if (!activeTrip || !currentUser) return;
-    if (activeTrip.finalized) return;
-    const existing = (activeTrip.votes || []).filter(
-      (v) => !(v.userId === currentUser.id && v.itemId === itemId)
-    );
-    const newVote: Vote = {
-      userId: currentUser.id,
-      userName: currentUser.name,
-      itemId,
-      vote,
-    };
-    const updatedVotes = [...existing, newVote];
-    const updatedTrip: Trip = { ...activeTrip, votes: updatedVotes };
-    const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
-    saveTrips.mutate(updated);
-    setActiveTrip(updatedTrip);
-  }, [activeTrip, currentUser, saveTrips, trips]);
+    voteMutation.mutate({ itemId, vote });
+  }, [voteMutation]);
+
+  const inviteCollaborator = useCallback(async (email: string, role: TripMemberRole) => {
+    const response = await inviteMutation.mutateAsync({ email, role });
+    return response.invite;
+  }, [inviteMutation]);
 
   const generatePlan = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     if (!activeTrip) return { success: false, message: 'No active trip' };
     setIsGenerating(true);
-    setGenProgress('Analyzing group preferences...');
+    setGenProgress('Analyzing real collaborator preferences...');
     setActiveTripPlan(null);
 
-    const allMembers = activeTrip.members;
-    const memberDetails = allMembers.map((m) => formatMemberPrefs(m)).join('\n\n');
-
-    const prompt = `You are Roamly, an AI group trip planner. Generate a complete trip plan based on individual member preferences.
-
-TRIP: "${activeTrip.name}"
-DESTINATION: ${activeTrip.destination || "Recommend based on group preferences"}
-GROUP SIZE: ${activeTrip.groupSize}
-
-INDIVIDUAL MEMBER PREFERENCES:
-${memberDetails}
-
-INSTRUCTIONS:
-- Find overlapping available dates across all members
-- Balance everyone's budgets (use the lowest total budget as a baseline)
-- Choose accommodation that satisfies the most must-haves
-- Plan activities that cover the most popular interests across the group
-- Account for dietary restrictions when recommending restaurants
-- You MUST generate exactly one flight entry for every single member listed below, no exceptions. If a member has no airport preference, use a major hub closest to a US city. Every member in the group must have a flight.
-- Suggest flights from each member's home airport, respecting their nonstop/timing preferences
-- Stay within individual flight budgets
-- If rental car is needed by majority, include it in the plan
-- Prioritize must-haves and avoid deal breakers from all members
-
-Generate a COMPLETE trip plan with real place names, realistic prices, practical timing. Include 3 lodging options, exactly one flight for EACH of the ${allMembers.length} members listed above (${allMembers.map(m => m.name).join(', ')}), a full day-by-day itinerary, at least 8 restaurants, and 5 pro tips.
-
-IMPORTANT DATE FORMAT: All dates must be formatted as "Month Day Year" with no commas. Examples: "January 15 2026", "March 3 2026". The recommended_dates field should use "YYYY-MM-DD to YYYY-MM-DD" format. Each itinerary day's date field must use "Month Day Year" format with no commas.`;
+    const members = activeTrip.members;
+    const memberDetails = members.map((member) => formatMemberPrefs(member)).join('\n\n');
+    const prompt = `You are Roamly, an AI group trip planner. Generate a complete trip plan based on individual member preferences.\n\nTRIP: "${activeTrip.name}"\nDESTINATION: ${activeTrip.destination || 'Recommend based on group preferences'}\nGROUP SIZE: ${members.length}\n\nCOLLABORATOR PREFERENCES:\n${memberDetails}\n\nGenerate 3 lodging options, exactly one flight for each collaborator (${members.map((member) => member.name).join(', ')}), a full itinerary, restaurants, and practical cost estimates.`;
 
     try {
-      setGenProgress('Finding best lodging options...');
-
       const plan = await generateObject({
         messages: [{ role: 'user', content: prompt }],
         schema: tripPlanSchema,
       });
-
+      await savePlanMutation.mutateAsync(plan);
       setActiveTripPlan(plan);
-      const updatedTrip: Trip = { ...activeTrip, status: 'planned', plan };
-      const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
-      saveTrips.mutate(updated);
-      setActiveTrip(updatedTrip);
       setIsGenerating(false);
       setGenProgress('');
-      return { success: true, message: 'Trip plan generated!' };
-    } catch (err) {
-      console.error('Generation error:', err);
+      return { success: true, message: 'Trip plan generated for your real collaborator group.' };
+    } catch (error) {
+      console.log('AI plan generation failed, using fallback', { message: error instanceof Error ? error.message : 'unknown' });
       const fallback = generateFallbackPlan(activeTrip);
+      await savePlanMutation.mutateAsync(fallback);
       setActiveTripPlan(fallback);
-      const updatedTrip: Trip = { ...activeTrip, status: 'planned', plan: fallback };
-      const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
-      saveTrips.mutate(updated);
-      setActiveTrip(updatedTrip);
       setIsGenerating(false);
       setGenProgress('');
-      return { success: false, message: 'Using sample plan (AI unavailable)' };
+      return { success: false, message: 'Using fallback plan while AI is unavailable.' };
     }
-  }, [activeTrip, saveTrips, trips]);
+  }, [activeTrip, savePlanMutation]);
 
-  const finalizePlan = useCallback(() => {
-    if (!activeTrip || !activeTrip.plan) {
-      console.log('Cannot finalize plan: missing active trip or plan');
-      return;
-    }
+  const finalizePlan = useCallback(async () => {
+    if (!activeTrip?.plan) return;
 
     const plan = activeTrip.plan;
-    const tripVotes = activeTrip.votes || [];
+    const tripVotes = activeTrip.votes;
     const confirmed: string[] = [];
-
     const getScore = (itemId: string): number => {
-      const itemVotes = tripVotes.filter((v) => v.itemId === itemId);
-      const up = itemVotes.filter((v) => v.vote === 'up').length;
-      const down = itemVotes.filter((v) => v.vote === 'down').length;
+      const itemVotes = tripVotes.filter((vote) => vote.itemId === itemId);
+      const up = itemVotes.filter((vote) => vote.vote === 'up').length;
+      const down = itemVotes.filter((vote) => vote.vote === 'down').length;
       return up - down;
     };
 
     let bestLodgingIdx = 0;
     let bestLodgingScore = -Infinity;
-    plan.lodging.forEach((lodgingOption, i) => {
-      const score = getScore(`lodging-${i}`);
-      const fallbackScore = lodgingOption.recommended ? 0.5 : 0;
-      if (score + fallbackScore > bestLodgingScore) {
-        bestLodgingScore = score + fallbackScore;
-        bestLodgingIdx = i;
+    plan.lodging.forEach((option, index) => {
+      const score = getScore(`lodging-${index}`) + (option.recommended ? 0.5 : 0);
+      if (score > bestLodgingScore) {
+        bestLodgingScore = score;
+        bestLodgingIdx = index;
       }
     });
     confirmed.push(`lodging-${bestLodgingIdx}`);
 
     let bestFlightIdx = 0;
     let bestFlightScore = -Infinity;
-    plan.flights.forEach((flightOption, i) => {
-      const score = getScore(`flight-${i}`);
-      const fallbackScore = i === 0 ? 0.25 : 0;
-      if (score + fallbackScore > bestFlightScore) {
-        bestFlightScore = score + fallbackScore;
-        bestFlightIdx = i;
+    plan.flights.forEach((option, index) => {
+      const score = getScore(`flight-${index}`) + (index === 0 ? 0.25 : 0);
+      if (score > bestFlightScore) {
+        bestFlightScore = score;
+        bestFlightIdx = index;
       }
     });
     confirmed.push(`flight-${bestFlightIdx}`);
 
     plan.itinerary.forEach((day) => {
-      let bestDayItemId: string | null = null;
+      let bestDayItemId = `activity-${day.day}-morning`;
       let bestDayScore = -Infinity;
       (['morning', 'afternoon', 'evening'] as const).forEach((slot, slotIndex) => {
-        const data = day[slot];
-        if (!data?.activity) return;
         const itemId = `activity-${day.day}-${slot}`;
-        const score = getScore(itemId);
-        const fallbackScore = slotIndex === 0 ? 0.2 : 0;
-        if (score + fallbackScore > bestDayScore) {
-          bestDayScore = score + fallbackScore;
+        const score = getScore(itemId) + (slotIndex === 0 ? 0.2 : 0);
+        if (score > bestDayScore) {
+          bestDayScore = score;
           bestDayItemId = itemId;
         }
       });
-      if (bestDayItemId) {
-        confirmed.push(bestDayItemId);
-      }
+      confirmed.push(bestDayItemId);
     });
 
-    const lodgingName = plan.lodging[bestLodgingIdx]?.name ?? 'Selected lodging';
-    const flightName = plan.flights[bestFlightIdx]
-      ? `${plan.flights[bestFlightIdx].airline} for ${plan.flights[bestFlightIdx].member_name}`
-      : 'selected flight';
-    const confirmedActivities = confirmed.filter((itemId) => itemId.startsWith('activity-')).length;
-    const nights = plan.summary.total_nights;
-    const dest = plan.summary.destination;
-    const summary = `${nights} nights in ${dest} are confirmed with ${lodgingName}, ${flightName}, and ${confirmedActivities} locked activities.`;
-
-    const finalizedData: FinalizedChoices = {
+    const finalized: FinalizedChoices = {
       confirmedItems: confirmed,
       finalizedAt: new Date().toISOString(),
-      summary,
+      summary: `${plan.summary.total_nights} nights in ${plan.summary.destination} are locked in for your real collaborator group.`,
     };
 
-    console.log('Finalizing trip plan', { tripId: activeTrip.id, confirmedItems: confirmed });
-    const updatedTrip: Trip = { ...activeTrip, status: 'finalized', finalized: finalizedData };
-    const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
-    saveTrips.mutate(updated);
-    setActiveTrip(updatedTrip);
-    setActiveTripPlan(plan);
-  }, [activeTrip, saveTrips, trips]);
+    await finalizeMutation.mutateAsync(finalized);
+  }, [activeTrip, finalizeMutation]);
 
   const completeOnboarding = useCallback(() => {
-    if (!currentUser) {
-      console.log('Cannot complete onboarding: no current user');
-      return;
-    }
+    onboardingMutation.mutate();
+  }, [onboardingMutation]);
 
-    const updatedUser: AppUser = {
-      ...currentUser,
-      hasCompletedOnboarding: true,
-    };
-
-    console.log('Completing onboarding for user', { email: updatedUser.email });
-    saveUser.mutate(updatedUser);
-  }, [currentUser, saveUser]);
+  const setActiveTrip = useCallback((trip: Trip | null) => {
+    setActiveTripId(trip?.id ?? null);
+    setActiveTripPlan(trip?.plan ?? null);
+  }, []);
 
   return useMemo(() => ({
     currentUser,
+    session,
     trips,
     activeTrip,
     activeTripPlan,
     isGenerating,
     genProgress,
-    isLoading: userQuery.isLoading || tripsQuery.isLoading,
+    isLoading: sessionQuery.isLoading || tripsQuery.isLoading || authMutation.isPending,
     login,
+    signup,
     logout,
     createTrip,
-    joinTrip,
     submitPreferences,
-    addDemoMembers,
-    generatePlan,
     castVote,
+    generatePlan,
     finalizePlan,
     completeOnboarding,
+    inviteCollaborator,
+    isAuthLoading: authMutation.isPending,
+    isSavingTrip: createTripMutation.isPending,
     setActiveTrip,
     setActiveTripPlan,
   }), [
     activeTrip,
     activeTripPlan,
-    addDemoMembers,
+    authMutation.isPending,
     castVote,
     completeOnboarding,
     createTrip,
+    createTripMutation.isPending,
     currentUser,
     finalizePlan,
     genProgress,
     generatePlan,
+    inviteCollaborator,
     isGenerating,
-    joinTrip,
     login,
     logout,
+    session,
+    sessionQuery.isLoading,
+    setActiveTrip,
+    signup,
     submitPreferences,
     trips,
     tripsQuery.isLoading,
-    userQuery.isLoading,
   ]);
 });
