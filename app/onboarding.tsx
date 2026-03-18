@@ -5,15 +5,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   Animated,
-  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Users, ThumbsUp, Sparkles } from 'lucide-react-native';
-import { Colors } from '@/constants/colors';
+import { useTrips } from '@/context/TripContext';
 import { LinearGradient } from 'expo-linear-gradient';
-
-const { width: W } = Dimensions.get('window');
 
 interface OnboardingStep {
   icon: React.ReactNode;
@@ -49,6 +46,7 @@ const STEPS: OnboardingStep[] = [
 
 export default function OnboardingScreen() {
   const router = useRouter();
+  const { currentUser, completeOnboarding } = useTrips();
   const [currentStep, setCurrentStep] = useState<number>(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -74,17 +72,23 @@ export default function OnboardingScreen() {
     });
   }, [fadeAnim, slideAnim, iconScale]);
 
+  const finishOnboarding = useCallback(() => {
+    console.log('Finishing onboarding flow', { currentUserId: currentUser?.id ?? 'unknown' });
+    completeOnboarding();
+    router.replace('/dashboard');
+  }, [completeOnboarding, currentUser?.id, router]);
+
   const handleNext = useCallback(() => {
     if (isLast) {
-      router.replace('/dashboard');
+      finishOnboarding();
     } else {
       animateTransition(currentStep + 1);
     }
-  }, [isLast, currentStep, animateTransition, router]);
+  }, [animateTransition, currentStep, finishOnboarding, isLast]);
 
   const handleSkip = useCallback(() => {
-    router.replace('/dashboard');
-  }, [router]);
+    finishOnboarding();
+  }, [finishOnboarding]);
 
   return (
     <View style={styles.root}>

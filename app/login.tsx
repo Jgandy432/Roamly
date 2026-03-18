@@ -37,12 +37,13 @@ export default function LoginScreen() {
     ]).start(() => {
       inputRef.current?.focus();
     });
-  }, [step]);
+  }, [fadeAnim, slideAnim, step]);
 
   const handleContinue = () => {
     if (step === 'email' && email.includes('@')) {
       setStep('name');
     } else if (step === 'name' && name.trim().length > 1) {
+      console.log('Completing login flow', { email, name: name.trim() });
       login(email, name.trim());
       router.replace('/dashboard');
     }

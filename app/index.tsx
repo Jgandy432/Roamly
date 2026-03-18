@@ -18,7 +18,12 @@ export default function WelcomeScreen() {
   const bgPulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    if (currentUser && !isLoading) { router.replace('/dashboard'); return; }
+    if (currentUser && !isLoading) {
+      const nextRoute = currentUser.hasCompletedOnboarding ? '/dashboard' : '/onboarding';
+      console.log('Routing from welcome screen', { nextRoute, hasCompletedOnboarding: currentUser.hasCompletedOnboarding });
+      router.replace(nextRoute);
+      return;
+    }
 
     Animated.loop(
       Animated.sequence([
@@ -36,7 +41,7 @@ export default function WelcomeScreen() {
       Animated.timing(bottomFade, { toValue: 1, duration: 700, delay: 700, useNativeDriver: true }),
       Animated.spring(bottomSlide, { toValue: 0, friction: 12, tension: 40, delay: 700, useNativeDriver: true }),
     ]).start();
-  }, [currentUser, isLoading]);
+  }, [bgPulse, bottomFade, bottomSlide, currentUser, fadeIn, isLoading, router, slideUp]);
 
   const bgScale = bgPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] });
 

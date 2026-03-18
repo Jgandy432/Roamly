@@ -61,7 +61,7 @@ export default function SignupScreen() {
     ]).start(() => {
       inputRef.current?.focus();
     });
-  }, [step]);
+  }, [fadeAnim, slideAnim, step]);
 
   const formatPhone = (text: string) => {
     const digits = text.replace(/\D/g, '').slice(0, 10);
@@ -89,7 +89,8 @@ export default function SignupScreen() {
     } else if (step === 'phone') {
       setStep('name');
     } else if (step === 'name') {
-      login(email, name.trim());
+      console.log('Completing signup flow', { email, name: name.trim() });
+      login(email, name.trim(), { hasCompletedOnboarding: false });
       router.replace('/onboarding');
     }
   };

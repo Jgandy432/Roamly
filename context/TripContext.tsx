@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -114,13 +114,17 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     },
   });
 
-  const trips = tripsQuery.data ?? [];
+  const trips = useMemo<Trip[]>(() => tripsQuery.data ?? [], [tripsQuery.data]);
 
   useEffect(() => {
     if (userQuery.data && !currentUser) {
+      console.log('Hydrating stored user', {
+        email: userQuery.data.email,
+        hasCompletedOnboarding: userQuery.data.hasCompletedOnboarding,
+      });
       setCurrentUser(userQuery.data);
     }
-  }, [userQuery.data]);
+  }, [currentUser, userQuery.data]);
 
   const saveUser = useMutation({
     mutationFn: async (user: AppUser) => {
@@ -143,22 +147,26 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     },
   });
 
-  const login = useCallback((email: string, name: string) => {
+  const login = useCallback((email: string, name: string, options?: { hasCompletedOnboarding?: boolean }) => {
+    const existingUser = trips.flatMap((trip) => trip.members).find((member) => member.email.toLowerCase() === email.toLowerCase());
     const user: AppUser = {
-      id: generateId(),
+      id: existingUser?.id ?? generateId(),
       email,
       name,
       avatar: name.charAt(0).toUpperCase(),
+      hasCompletedOnboarding: options?.hasCompletedOnboarding ?? existingUser?.id !== undefined,
     };
+    console.log('Logging in user', { email, name, hasCompletedOnboarding: user.hasCompletedOnboarding });
     saveUser.mutate(user);
     return user;
-  }, []);
+  }, [saveUser, trips]);
 
   const logout = useCallback(() => {
+    console.log('Logging out current user');
     setCurrentUser(null);
-    AsyncStorage.removeItem(STORAGE_KEY_USER);
+    void AsyncStorage.removeItem(STORAGE_KEY_USER);
     queryClient.setQueryData(['user'], null);
-  }, []);
+  }, [queryClient]);
 
   const createTrip = useCallback((tripData: TripData): Trip => {
     if (!currentUser) throw new Error('Not logged in');
@@ -185,7 +193,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     saveTrips.mutate(updated);
     setActiveTrip(newTrip);
     return newTrip;
-  }, [currentUser, trips]);
+  }, [currentUser, saveTrips, trips]);
 
   const joinTrip = useCallback((code: string): { success: boolean; message: string } => {
     if (!currentUser) return { success: false, message: 'Not logged in' };
@@ -209,7 +217,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     saveTrips.mutate(updated);
     setActiveTrip(updatedTrip);
     return { success: true, message: `Joined "${trip.name}"!` };
-  }, [currentUser, trips]);
+  }, [currentUser, saveTrips, trips]);
 
   const submitPreferences = useCallback((prefs: UserPreferences) => {
     if (!activeTrip || !currentUser) return;
@@ -220,7 +228,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
     saveTrips.mutate(updated);
     setActiveTrip(updatedTrip);
-  }, [activeTrip, currentUser, trips]);
+  }, [activeTrip, currentUser, saveTrips, trips]);
 
   const addDemoMembers = useCallback(() => {
     if (!activeTrip) return;
@@ -263,7 +271,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
     saveTrips.mutate(updated);
     setActiveTrip(updatedTrip);
-  }, [activeTrip, trips]);
+  }, [activeTrip, saveTrips, trips]);
 
   const castVote = useCallback((itemId: string, vote: 'up' | 'down') => {
     if (!activeTrip || !currentUser) return;
@@ -282,7 +290,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
     saveTrips.mutate(updated);
     setActiveTrip(updatedTrip);
-  }, [activeTrip, currentUser, trips]);
+  }, [activeTrip, currentUser, saveTrips, trips]);
 
   const generatePlan = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     if (!activeTrip) return { success: false, message: 'No active trip' };
@@ -346,15 +354,19 @@ IMPORTANT DATE FORMAT: All dates must be formatted as "Month Day Year" with no c
       setGenProgress('');
       return { success: false, message: 'Using sample plan (AI unavailable)' };
     }
-  }, [activeTrip, trips]);
+  }, [activeTrip, saveTrips, trips]);
 
   const finalizePlan = useCallback(() => {
-    if (!activeTrip || !activeTrip.plan) return;
+    if (!activeTrip || !activeTrip.plan) {
+      console.log('Cannot finalize plan: missing active trip or plan');
+      return;
+    }
+
     const plan = activeTrip.plan;
     const tripVotes = activeTrip.votes || [];
     const confirmed: string[] = [];
 
-    const getScore = (itemId: string) => {
+    const getScore = (itemId: string): number => {
       const itemVotes = tripVotes.filter((v) => v.itemId === itemId);
       const up = itemVotes.filter((v) => v.vote === 'up').length;
       const down = itemVotes.filter((v) => v.vote === 'down').length;
@@ -363,32 +375,55 @@ IMPORTANT DATE FORMAT: All dates must be formatted as "Month Day Year" with no c
 
     let bestLodgingIdx = 0;
     let bestLodgingScore = -Infinity;
-    plan.lodging.forEach((_, i) => {
+    plan.lodging.forEach((lodgingOption, i) => {
       const score = getScore(`lodging-${i}`);
-      if (score > bestLodgingScore) {
-        bestLodgingScore = score;
+      const fallbackScore = lodgingOption.recommended ? 0.5 : 0;
+      if (score + fallbackScore > bestLodgingScore) {
+        bestLodgingScore = score + fallbackScore;
         bestLodgingIdx = i;
       }
     });
     confirmed.push(`lodging-${bestLodgingIdx}`);
 
-    plan.flights.forEach((_, i) => {
-      confirmed.push(`flight-${i}`);
+    let bestFlightIdx = 0;
+    let bestFlightScore = -Infinity;
+    plan.flights.forEach((flightOption, i) => {
+      const score = getScore(`flight-${i}`);
+      const fallbackScore = i === 0 ? 0.25 : 0;
+      if (score + fallbackScore > bestFlightScore) {
+        bestFlightScore = score + fallbackScore;
+        bestFlightIdx = i;
+      }
     });
+    confirmed.push(`flight-${bestFlightIdx}`);
 
     plan.itinerary.forEach((day) => {
-      (['morning', 'afternoon', 'evening'] as const).forEach((slot) => {
+      let bestDayItemId: string | null = null;
+      let bestDayScore = -Infinity;
+      (['morning', 'afternoon', 'evening'] as const).forEach((slot, slotIndex) => {
         const data = day[slot];
-        if (data?.activity) {
-          confirmed.push(`activity-${day.day}-${slot}`);
+        if (!data?.activity) return;
+        const itemId = `activity-${day.day}-${slot}`;
+        const score = getScore(itemId);
+        const fallbackScore = slotIndex === 0 ? 0.2 : 0;
+        if (score + fallbackScore > bestDayScore) {
+          bestDayScore = score + fallbackScore;
+          bestDayItemId = itemId;
         }
       });
+      if (bestDayItemId) {
+        confirmed.push(bestDayItemId);
+      }
     });
 
-    const lodgingName = plan.lodging[bestLodgingIdx]?.name || 'Selected lodging';
+    const lodgingName = plan.lodging[bestLodgingIdx]?.name ?? 'Selected lodging';
+    const flightName = plan.flights[bestFlightIdx]
+      ? `${plan.flights[bestFlightIdx].airline} for ${plan.flights[bestFlightIdx].member_name}`
+      : 'selected flight';
+    const confirmedActivities = confirmed.filter((itemId) => itemId.startsWith('activity-')).length;
     const nights = plan.summary.total_nights;
     const dest = plan.summary.destination;
-    const summary = `${nights} nights in ${dest} staying at ${lodgingName} with ${plan.flights.length} flights booked and ${plan.itinerary.length} days of activities planned.`;
+    const summary = `${nights} nights in ${dest} are confirmed with ${lodgingName}, ${flightName}, and ${confirmedActivities} locked activities.`;
 
     const finalizedData: FinalizedChoices = {
       confirmedItems: confirmed,
@@ -396,13 +431,30 @@ IMPORTANT DATE FORMAT: All dates must be formatted as "Month Day Year" with no c
       summary,
     };
 
+    console.log('Finalizing trip plan', { tripId: activeTrip.id, confirmedItems: confirmed });
     const updatedTrip: Trip = { ...activeTrip, status: 'finalized', finalized: finalizedData };
     const updated = trips.map((t) => (t.id === activeTrip.id ? updatedTrip : t));
     saveTrips.mutate(updated);
     setActiveTrip(updatedTrip);
-  }, [activeTrip, trips]);
+    setActiveTripPlan(plan);
+  }, [activeTrip, saveTrips, trips]);
 
-  return {
+  const completeOnboarding = useCallback(() => {
+    if (!currentUser) {
+      console.log('Cannot complete onboarding: no current user');
+      return;
+    }
+
+    const updatedUser: AppUser = {
+      ...currentUser,
+      hasCompletedOnboarding: true,
+    };
+
+    console.log('Completing onboarding for user', { email: updatedUser.email });
+    saveUser.mutate(updatedUser);
+  }, [currentUser, saveUser]);
+
+  return useMemo(() => ({
     currentUser,
     trips,
     activeTrip,
@@ -419,7 +471,27 @@ IMPORTANT DATE FORMAT: All dates must be formatted as "Month Day Year" with no c
     generatePlan,
     castVote,
     finalizePlan,
+    completeOnboarding,
     setActiveTrip,
     setActiveTripPlan,
-  };
+  }), [
+    activeTrip,
+    activeTripPlan,
+    addDemoMembers,
+    castVote,
+    completeOnboarding,
+    createTrip,
+    currentUser,
+    finalizePlan,
+    genProgress,
+    generatePlan,
+    isGenerating,
+    joinTrip,
+    login,
+    logout,
+    submitPreferences,
+    trips,
+    tripsQuery.isLoading,
+    userQuery.isLoading,
+  ]);
 });

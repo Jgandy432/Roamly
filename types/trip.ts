@@ -39,6 +39,7 @@ export interface AppUser {
   email: string;
   name: string;
   avatar: string;
+  hasCompletedOnboarding: boolean;
 }
 
 export interface TimeSlot {

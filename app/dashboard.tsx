@@ -30,8 +30,13 @@ export default function DashboardScreen() {
       router.replace('/');
       return;
     }
+    if (!currentUser.hasCompletedOnboarding) {
+      console.log('Redirecting incomplete user to onboarding', { email: currentUser.email });
+      router.replace('/onboarding');
+      return;
+    }
     Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
-  }, [currentUser]);
+  }, [currentUser, fadeAnim, router]);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
