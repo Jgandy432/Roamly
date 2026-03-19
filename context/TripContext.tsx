@@ -1,15 +1,13 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import createContextHook from '@nkzw/create-context-hook';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateObject } from '@rork-ai/toolkit-sdk';
 import { z } from 'zod';
 
+import { supabase } from '@/services/supabase';
 import { localApi } from '@/services/local-storage';
 import { generateFallbackPlan } from '@/utils/fallback-plan';
 import { AppUser, AuthSession, FinalizedChoices, Trip, TripData, TripMember, TripPlan, TripMemberRole, UserPreferences } from '@/types/trip';
-
-const STORAGE_KEY_SESSION = 'roamly_session';
 
 const tripPlanSchema = z.object({
   summary: z.object({
@@ -90,6 +88,18 @@ function pickTripById(trips: Trip[], tripId: string | null): Trip | null {
   return trips.find((trip) => trip.id === tripId) ?? null;
 }
 
+function supabaseUserToAppUser(user: { id: string; email?: string; user_metadata?: Record<string, unknown>; created_at?: string }): AppUser {
+  const meta = user.user_metadata ?? {};
+  return {
+    id: user.id,
+    email: user.email ?? '',
+    name: (meta.name as string) ?? (meta.full_name as string) ?? '',
+    avatar: (meta.avatar as string) ?? '',
+    hasCompletedOnboarding: (meta.has_completed_onboarding as boolean) ?? false,
+    createdAt: user.created_at ?? new Date().toISOString(),
+  };
+}
+
 export const [TripProvider, useTrips] = createContextHook(() => {
   const queryClient = useQueryClient();
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -98,22 +108,45 @@ export const [TripProvider, useTrips] = createContextHook(() => {
   const [activeTripPlan, setActiveTripPlan] = useState<TripPlan | null>(null);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [genProgress, setGenProgress] = useState<string>('');
-
-  const sessionQuery = useQuery({
-    queryKey: ['auth-session'],
-    queryFn: async () => {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY_SESSION);
-      return stored ? JSON.parse(stored) as AuthSession : null;
-    },
-  });
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
 
   useEffect(() => {
-    if (sessionQuery.data) {
-      console.log('Hydrating saved session', { userId: sessionQuery.data.user.id, email: sessionQuery.data.user.email });
-      setSession(sessionQuery.data);
-      setCurrentUser(sessionQuery.data.user);
-    }
-  }, [sessionQuery.data]);
+    console.log('Setting up Supabase auth listener');
+
+    void supabase.auth.getSession().then(({ data: { session: supaSession } }) => {
+      if (supaSession?.user) {
+        const appUser = supabaseUserToAppUser(supaSession.user);
+        const authSession: AuthSession = {
+          token: supaSession.access_token,
+          user: appUser,
+        };
+        console.log('Supabase session restored', { userId: appUser.id, email: appUser.email });
+        setSession(authSession);
+        setCurrentUser(appUser);
+      }
+      setIsInitializing(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, supaSession) => {
+      console.log('Supabase auth state changed:', _event);
+      if (supaSession?.user) {
+        const appUser = supabaseUserToAppUser(supaSession.user);
+        const authSession: AuthSession = {
+          token: supaSession.access_token,
+          user: appUser,
+        };
+        setSession(authSession);
+        setCurrentUser(appUser);
+      } else {
+        setSession(null);
+        setCurrentUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const tripsQuery = useQuery({
     queryKey: ['trips', session?.token ?? 'guest'],
@@ -134,14 +167,6 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     }
   }, [activeTrip]);
 
-  const persistSession = useCallback(async (nextSession: AuthSession | null) => {
-    if (nextSession) {
-      await AsyncStorage.setItem(STORAGE_KEY_SESSION, JSON.stringify(nextSession));
-    } else {
-      await AsyncStorage.removeItem(STORAGE_KEY_SESSION);
-    }
-  }, []);
-
   const authMutation = useMutation({
     mutationFn: async (input: { mode: 'login' | 'signup'; name?: string; email: string; password: string }) => {
       if (input.mode === 'signup') {
@@ -153,17 +178,13 @@ export const [TripProvider, useTrips] = createContextHook(() => {
       console.log('Auth success', { userId: response.session.user.id, email: response.session.user.email });
       setSession(response.session);
       setCurrentUser(response.session.user);
-      await persistSession(response.session);
-      queryClient.setQueryData(['auth-session'], response.session);
       void queryClient.invalidateQueries({ queryKey: ['trips'] });
     },
   });
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      if (session?.token) {
-        await localApi.logout(session.token);
-      }
+      await localApi.logout('');
       return true;
     },
     onSuccess: async () => {
@@ -172,8 +193,6 @@ export const [TripProvider, useTrips] = createContextHook(() => {
       setCurrentUser(null);
       setActiveTripId(null);
       setActiveTripPlan(null);
-      await persistSession(null);
-      queryClient.setQueryData(['auth-session'], null);
       queryClient.setQueryData(['trips', 'guest'], []);
       void queryClient.invalidateQueries({ queryKey: ['trips'] });
     },
@@ -255,12 +274,10 @@ export const [TripProvider, useTrips] = createContextHook(() => {
       return localApi.completeOnboarding(session.token);
     },
     onSuccess: async ({ user }) => {
-      const nextSession = session ? { ...session, user } : null;
       setCurrentUser(user);
-      if (nextSession) {
+      if (session) {
+        const nextSession = { ...session, user };
         setSession(nextSession);
-        await persistSession(nextSession);
-        queryClient.setQueryData(['auth-session'], nextSession);
       }
     },
   });
@@ -403,7 +420,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     activeTripPlan,
     isGenerating,
     genProgress,
-    isLoading: sessionQuery.isLoading || tripsQuery.isLoading || authMutation.isPending,
+    isLoading: isInitializing || tripsQuery.isLoading || authMutation.isPending,
     login,
     signup,
     logout,
@@ -432,10 +449,10 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     generatePlan,
     inviteCollaborator,
     isGenerating,
+    isInitializing,
     login,
     logout,
     session,
-    sessionQuery.isLoading,
     setActiveTrip,
     signup,
     submitPreferences,

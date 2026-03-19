@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/services/supabase';
 import {
-  AuthResponse,
   AppUser,
+  AuthResponse,
   FinalizedChoices,
   Trip,
   TripData,
@@ -12,7 +13,6 @@ import {
   UserPreferences,
 } from '@/types/trip';
 
-const USERS_KEY = 'roamly_users';
 const TRIPS_KEY = 'roamly_trips';
 
 const DUMMY_NAMES = [
@@ -112,27 +112,8 @@ function generateDummyMembers(count: number, startDate?: string, endDate?: strin
   return members;
 }
 
-interface StoredUser {
-  id: string;
-  name: string;
-  email: string;
-  password: string;
-  avatar: string;
-  hasCompletedOnboarding: boolean;
-  createdAt: string;
-}
-
 function generateId(): string {
   return `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
-
-async function getUsers(): Promise<StoredUser[]> {
-  const raw = await AsyncStorage.getItem(USERS_KEY);
-  return raw ? (JSON.parse(raw) as StoredUser[]) : [];
-}
-
-async function saveUsers(users: StoredUser[]): Promise<void> {
-  await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
 }
 
 async function getTrips(): Promise<Trip[]> {
@@ -144,80 +125,115 @@ async function saveTrips(trips: Trip[]): Promise<void> {
   await AsyncStorage.setItem(TRIPS_KEY, JSON.stringify(trips));
 }
 
-function toAppUser(u: StoredUser): AppUser {
+function supabaseUserToAppUser(user: { id: string; email?: string; user_metadata?: Record<string, unknown>; created_at?: string }): AppUser {
+  const meta = user.user_metadata ?? {};
   return {
-    id: u.id,
-    email: u.email,
-    name: u.name,
-    avatar: u.avatar,
-    hasCompletedOnboarding: u.hasCompletedOnboarding,
-    createdAt: u.createdAt,
+    id: user.id,
+    email: user.email ?? '',
+    name: (meta.name as string) ?? (meta.full_name as string) ?? '',
+    avatar: (meta.avatar as string) ?? '',
+    hasCompletedOnboarding: (meta.has_completed_onboarding as boolean) ?? false,
+    createdAt: user.created_at ?? new Date().toISOString(),
   };
 }
 
 export const localApi = {
   async signup(input: { name: string; email: string; password: string }): Promise<AuthResponse> {
-    console.log('localApi.signup', { email: input.email });
-    const users = await getUsers();
-    const existing = users.find((u) => u.email.toLowerCase() === input.email.toLowerCase());
-    if (existing) {
-      throw new Error('An account with this email already exists');
-    }
-    const newUser: StoredUser = {
-      id: generateId(),
-      name: input.name,
+    console.log('localApi.signup via Supabase', { email: input.email });
+    const { data, error } = await supabase.auth.signUp({
       email: input.email,
       password: input.password,
-      avatar: '',
-      hasCompletedOnboarding: false,
-      createdAt: new Date().toISOString(),
-    };
-    users.push(newUser);
-    await saveUsers(users);
-    const token = `local_${newUser.id}`;
-    return { session: { token, user: toAppUser(newUser) } };
+      options: {
+        data: {
+          name: input.name,
+          full_name: input.name,
+          avatar: '',
+          has_completed_onboarding: false,
+        },
+      },
+    });
+
+    if (error) {
+      console.log('Supabase signup error:', error.message);
+      throw new Error(error.message);
+    }
+
+    if (!data.user) {
+      throw new Error('Signup succeeded but no user was returned');
+    }
+
+    if (!data.session) {
+      console.log('Supabase signup: no session returned, email confirmation may be required');
+      const appUser = supabaseUserToAppUser(data.user);
+      return { session: { token: `pending_${data.user.id}`, user: appUser } };
+    }
+
+    const appUser = supabaseUserToAppUser(data.user);
+    console.log('Supabase signup success', { userId: data.user.id });
+    return { session: { token: data.session.access_token, user: appUser } };
   },
 
   async login(input: { email: string; password: string }): Promise<AuthResponse> {
-    console.log('localApi.login', { email: input.email });
-    const users = await getUsers();
-    const user = users.find(
-      (u) => u.email.toLowerCase() === input.email.toLowerCase() && u.password === input.password,
-    );
-    if (!user) {
-      throw new Error('Invalid email or password');
+    console.log('localApi.login via Supabase', { email: input.email });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: input.email,
+      password: input.password,
+    });
+
+    if (error) {
+      console.log('Supabase login error:', error.message);
+      throw new Error(error.message);
     }
-    const token = `local_${user.id}`;
-    return { session: { token, user: toAppUser(user) } };
+
+    if (!data.user || !data.session) {
+      throw new Error('Login succeeded but no session was returned');
+    }
+
+    const appUser = supabaseUserToAppUser(data.user);
+    console.log('Supabase login success', { userId: data.user.id });
+    return { session: { token: data.session.access_token, user: appUser } };
   },
 
-  async me(token: string): Promise<{ user: AppUser }> {
-    const userId = token.replace('local_', '');
-    const users = await getUsers();
-    const user = users.find((u) => u.id === userId);
-    if (!user) {
+  async me(_token: string): Promise<{ user: AppUser }> {
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) {
+      console.log('Supabase getUser error:', error?.message);
       throw new Error('User not found');
     }
-    return { user: toAppUser(user) };
+    return { user: supabaseUserToAppUser(data.user) };
   },
 
   async logout(_token: string): Promise<{ success: boolean }> {
-    console.log('localApi.logout');
+    console.log('localApi.logout via Supabase');
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.log('Supabase signOut error:', error.message);
+    }
     return { success: true };
   },
 
-  async completeOnboarding(token: string): Promise<{ user: AppUser }> {
-    const userId = token.replace('local_', '');
-    const users = await getUsers();
-    const idx = users.findIndex((u) => u.id === userId);
-    if (idx === -1) throw new Error('User not found');
-    users[idx].hasCompletedOnboarding = true;
-    await saveUsers(users);
-    return { user: toAppUser(users[idx]) };
+  async completeOnboarding(_token: string): Promise<{ user: AppUser }> {
+    console.log('localApi.completeOnboarding via Supabase');
+    const { data, error } = await supabase.auth.updateUser({
+      data: { has_completed_onboarding: true },
+    });
+
+    if (error || !data.user) {
+      console.log('Supabase updateUser error:', error?.message);
+      throw new Error('Failed to complete onboarding');
+    }
+
+    return { user: supabaseUserToAppUser(data.user) };
   },
 
-  async listTrips(token: string): Promise<{ trips: Trip[] }> {
-    const userId = token.replace('local_', '');
+  async listTrips(_token: string): Promise<{ trips: Trip[] }> {
+    const { data } = await supabase.auth.getUser();
+    const userId = data.user?.id;
+    if (!userId) {
+      console.log('localApi.listTrips: no authenticated user');
+      return { trips: [] };
+    }
+
     const trips = await getTrips();
     const userTrips = trips.filter(
       (t) => t.createdBy === userId || t.members.some((m) => m.userId === userId),
@@ -226,18 +242,19 @@ export const localApi = {
     return { trips: userTrips };
   },
 
-  async createTrip(token: string, tripData: TripData): Promise<{ trip: Trip }> {
-    const userId = token.replace('local_', '');
-    const users = await getUsers();
-    const user = users.find((u) => u.id === userId);
-    if (!user) throw new Error('User not found');
+  async createTrip(_token: string, tripData: TripData): Promise<{ trip: Trip }> {
+    const { data } = await supabase.auth.getUser();
+    const user = data.user;
+    if (!user) throw new Error('Not authenticated');
+
+    const appUser = supabaseUserToAppUser(user);
 
     const ownerMember: TripMember = {
       id: generateId(),
-      userId: user.id,
-      name: user.name,
-      email: user.email,
-      avatar: user.avatar,
+      userId: appUser.id,
+      name: appUser.name,
+      email: appUser.email,
+      avatar: appUser.avatar,
       role: 'owner',
       joinedAt: new Date().toISOString(),
       preferencesSubmitted: false,
@@ -258,7 +275,7 @@ export const localApi = {
       startDate: tripData.startDate,
       endDate: tripData.endDate,
       description: tripData.description,
-      createdBy: userId,
+      createdBy: appUser.id,
       createdAt: new Date().toISOString(),
       members: [ownerMember, ...dummyMembers],
       invites: [],
@@ -274,8 +291,11 @@ export const localApi = {
     return { trip };
   },
 
-  async savePreferences(token: string, tripId: string, preferences: UserPreferences): Promise<{ trip: Trip }> {
-    const userId = token.replace('local_', '');
+  async savePreferences(_token: string, tripId: string, preferences: UserPreferences): Promise<{ trip: Trip }> {
+    const { data } = await supabase.auth.getUser();
+    const userId = data.user?.id;
+    if (!userId) throw new Error('Not authenticated');
+
     const trips = await getTrips();
     const idx = trips.findIndex((t) => t.id === tripId);
     if (idx === -1) throw new Error('Trip not found');
@@ -290,7 +310,7 @@ export const localApi = {
     return { trip: trips[idx] };
   },
 
-  async savePlan(token: string, tripId: string, plan: TripPlan): Promise<{ trip: Trip }> {
+  async savePlan(_token: string, tripId: string, plan: TripPlan): Promise<{ trip: Trip }> {
     const trips = await getTrips();
     const idx = trips.findIndex((t) => t.id === tripId);
     if (idx === -1) throw new Error('Trip not found');
@@ -302,10 +322,13 @@ export const localApi = {
     return { trip: trips[idx] };
   },
 
-  async vote(token: string, tripId: string, itemId: string, vote: 'up' | 'down'): Promise<{ trip: Trip }> {
-    const userId = token.replace('local_', '');
-    const users = await getUsers();
-    const user = users.find((u) => u.id === userId);
+  async vote(_token: string, tripId: string, itemId: string, vote: 'up' | 'down'): Promise<{ trip: Trip }> {
+    const { data } = await supabase.auth.getUser();
+    const user = data.user;
+    const userId = user?.id;
+    if (!userId) throw new Error('Not authenticated');
+
+    const appUser = supabaseUserToAppUser(user);
     const trips = await getTrips();
     const idx = trips.findIndex((t) => t.id === tripId);
     if (idx === -1) throw new Error('Trip not found');
@@ -316,7 +339,7 @@ export const localApi = {
     } else {
       trips[idx].votes.push({
         userId,
-        userName: user?.name ?? 'Unknown',
+        userName: appUser.name ?? 'Unknown',
         itemId,
         vote,
       });
@@ -326,7 +349,7 @@ export const localApi = {
     return { trip: trips[idx] };
   },
 
-  async finalize(token: string, tripId: string, finalized: FinalizedChoices): Promise<{ trip: Trip }> {
+  async finalize(_token: string, tripId: string, finalized: FinalizedChoices): Promise<{ trip: Trip }> {
     const trips = await getTrips();
     const idx = trips.findIndex((t) => t.id === tripId);
     if (idx === -1) throw new Error('Trip not found');
@@ -338,13 +361,10 @@ export const localApi = {
     return { trip: trips[idx] };
   },
 
-  async invite(token: string, tripId: string, email: string, role: TripMemberRole): Promise<{ trip: Trip; invite: TripInvite }> {
+  async invite(_token: string, tripId: string, email: string, role: TripMemberRole): Promise<{ trip: Trip; invite: TripInvite }> {
     const trips = await getTrips();
     const idx = trips.findIndex((t) => t.id === tripId);
     if (idx === -1) throw new Error('Trip not found');
-
-    const users = await getUsers();
-    const invitedUser = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
 
     const invite: TripInvite = {
       id: generateId(),
@@ -357,55 +377,37 @@ export const localApi = {
     };
 
     trips[idx].invites.push(invite);
-
-    if (invitedUser) {
-      const alreadyMember = trips[idx].members.some((m) => m.userId === invitedUser.id);
-      if (!alreadyMember) {
-        trips[idx].members.push({
-          id: generateId(),
-          userId: invitedUser.id,
-          name: invitedUser.name,
-          email: invitedUser.email,
-          avatar: invitedUser.avatar,
-          role,
-          joinedAt: new Date().toISOString(),
-          preferencesSubmitted: false,
-        });
-        invite.status = 'accepted';
-      }
-    }
-
     await saveTrips(trips);
     console.log('localApi.invite', { tripId, email, role });
     return { trip: trips[idx], invite };
   },
 
-  async acceptInvite(token: string, inviteToken: string): Promise<{ trip: Trip }> {
-    const userId = token.replace('local_', '');
-    const users = await getUsers();
-    const user = users.find((u) => u.id === userId);
-    if (!user) throw new Error('User not found');
+  async acceptInvite(_token: string, inviteToken: string): Promise<{ trip: Trip }> {
+    const { data } = await supabase.auth.getUser();
+    const user = data.user;
+    if (!user) throw new Error('Not authenticated');
 
+    const appUser = supabaseUserToAppUser(user);
     const trips = await getTrips();
     for (const trip of trips) {
       const invite = trip.invites.find((inv) => inv.inviteToken === inviteToken && inv.status === 'pending');
       if (invite) {
         invite.status = 'accepted';
-        const alreadyMember = trip.members.some((m) => m.userId === userId);
+        const alreadyMember = trip.members.some((m) => m.userId === appUser.id);
         if (!alreadyMember) {
           trip.members.push({
             id: generateId(),
-            userId: user.id,
-            name: user.name,
-            email: user.email,
-            avatar: user.avatar,
+            userId: appUser.id,
+            name: appUser.name,
+            email: appUser.email,
+            avatar: appUser.avatar,
             role: invite.role,
             joinedAt: new Date().toISOString(),
             preferencesSubmitted: false,
           });
         }
         await saveTrips(trips);
-        console.log('localApi.acceptInvite', { tripId: trip.id, userId });
+        console.log('localApi.acceptInvite', { tripId: trip.id, userId: appUser.id });
         return { trip };
       }
     }
