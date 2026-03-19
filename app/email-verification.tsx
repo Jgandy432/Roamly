@@ -8,7 +8,7 @@ import { supabase } from '@/services/supabase';
 import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
 
-const OTP_LENGTH = 9;
+const OTP_LENGTH = 8;
 
 export default function EmailVerificationScreen() {
   const router = useRouter();
@@ -171,7 +171,7 @@ export default function EmailVerificationScreen() {
             <Animated.View style={[styles.textArea, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
               <Text style={styles.heading}>Enter verification code</Text>
               <Text style={styles.body}>
-                We sent a 9-digit code to
+                We sent an 8-digit code to
               </Text>
               <Text style={styles.emailText}>{email || 'your email'}</Text>
             </Animated.View>
@@ -189,7 +189,7 @@ export default function EmailVerificationScreen() {
                   onChangeText={(value) => handleOtpChange(value, index)}
                   onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
                   keyboardType="number-pad"
-                  maxLength={Platform.OS === 'web' ? 9 : 1}
+                  maxLength={Platform.OS === 'web' ? 8 : 1}
                   selectTextOnFocus
                   testID={`otp-input-${index}`}
                   autoFocus={index === 0}
