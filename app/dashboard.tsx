@@ -66,8 +66,8 @@ export default function DashboardScreen() {
 
           <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
             <View style={styles.infoCard}>
-              <Text style={styles.infoTitle}>Real collaborators only</Text>
-              <Text style={styles.infoBody}>Trips now load members from authenticated user accounts. Invite collaborators by email from inside each trip.</Text>
+              <Text style={styles.infoTitle}>Plan trips with friends</Text>
+              <Text style={styles.infoBody}>Invite friends or family by email and plan your next adventure together — flights, stays, and activities, all in one place.</Text>
             </View>
 
             <View style={styles.sectionHeader}>
@@ -81,7 +81,7 @@ export default function DashboardScreen() {
             {trips.length === 0 ? (
               <View style={styles.empty}>
                 <Text style={styles.emptyIcon}>🧳</Text>
-                <Text style={styles.emptyText}>No account-backed trips yet. Create one to invite real collaborators.</Text>
+                <Text style={styles.emptyText}>No trips yet. Create one and invite your crew to start planning.</Text>
               </View>
             ) : (
               trips.map((trip) => (
