@@ -1,4 +1,3 @@
-import { serve } from '@hono/node-server';
 import bcrypt from 'bcryptjs';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
@@ -56,9 +55,9 @@ function parseBody<T>(value: unknown): T {
   return value as T;
 }
 
-app.get('/api/', (c) => c.json({ status: 'ok', message: 'Roamly backend is running' }));
+app.get('/', (c) => c.json({ status: 'ok', message: 'Roamly backend is running' }));
 
-app.post('/api/auth/signup', async (c) => {
+app.post('/auth/signup', async (c) => {
   try {
     const body = parseBody<{ name?: string; email?: string; password?: string }>(await c.req.json());
     const email = body.email?.trim().toLowerCase() ?? '';
@@ -98,7 +97,7 @@ app.post('/api/auth/signup', async (c) => {
   }
 });
 
-app.post('/api/auth/login', async (c) => {
+app.post('/auth/login', async (c) => {
   try {
     const body = parseBody<{ email?: string; password?: string }>(await c.req.json());
     const email = body.email?.trim().toLowerCase() ?? '';
@@ -124,7 +123,7 @@ app.post('/api/auth/login', async (c) => {
   }
 });
 
-app.get('/api/auth/me', async (c) => {
+app.get('/auth/me', async (c) => {
   const user = await getAuthUser(c.req.raw);
   if (!user) {
     return jsonError('Unauthorized', 401);
@@ -132,11 +131,11 @@ app.get('/api/auth/me', async (c) => {
   return c.json({ user: publicUser(user) });
 });
 
-app.post('/api/auth/logout', async (c) => {
+app.post('/auth/logout', async (c) => {
   return c.json({ success: true });
 });
 
-app.patch('/api/auth/onboarding', async (c) => {
+app.patch('/auth/onboarding', async (c) => {
   try {
     const authUser = await requireAuth(c.req.raw);
     let updatedUser: StoredUser | null = null;
@@ -161,7 +160,7 @@ app.patch('/api/auth/onboarding', async (c) => {
   }
 });
 
-app.get('/api/trips', async (c) => {
+app.get('/trips', async (c) => {
   try {
     const authUser = await requireAuth(c.req.raw);
     const db = await readDb();
@@ -173,7 +172,7 @@ app.get('/api/trips', async (c) => {
   }
 });
 
-app.post('/api/trips', async (c) => {
+app.post('/trips', async (c) => {
   try {
     const authUser = await requireAuth(c.req.raw);
     const body = parseBody<{ tripName?: string; destination?: string; startDate?: string; endDate?: string; description?: string; groupSize?: number; constraints?: string }>(await c.req.json());
@@ -222,7 +221,7 @@ app.post('/api/trips', async (c) => {
   }
 });
 
-app.get('/api/trips/:tripId', async (c) => {
+app.get('/trips/:tripId', async (c) => {
   try {
     const authUser = await requireAuth(c.req.raw);
     const tripId = c.req.param('tripId');
@@ -238,7 +237,7 @@ app.get('/api/trips/:tripId', async (c) => {
   }
 });
 
-app.post('/api/trips/:tripId/preferences', async (c) => {
+app.post('/trips/:tripId/preferences', async (c) => {
   try {
     const authUser = await requireAuth(c.req.raw);
     const tripId = c.req.param('tripId');
@@ -267,7 +266,7 @@ app.post('/api/trips/:tripId/preferences', async (c) => {
   }
 });
 
-app.patch('/api/trips/:tripId/plan', async (c) => {
+app.patch('/trips/:tripId/plan', async (c) => {
   try {
     const authUser = await requireAuth(c.req.raw);
     const tripId = c.req.param('tripId');
@@ -296,7 +295,7 @@ app.patch('/api/trips/:tripId/plan', async (c) => {
   }
 });
 
-app.post('/api/trips/:tripId/votes', async (c) => {
+app.post('/trips/:tripId/votes', async (c) => {
   try {
     const authUser = await requireAuth(c.req.raw);
     const tripId = c.req.param('tripId');
@@ -340,7 +339,7 @@ app.post('/api/trips/:tripId/votes', async (c) => {
   }
 });
 
-app.post('/api/trips/:tripId/finalize', async (c) => {
+app.post('/trips/:tripId/finalize', async (c) => {
   try {
     const authUser = await requireAuth(c.req.raw);
     const tripId = c.req.param('tripId');
@@ -368,7 +367,7 @@ app.post('/api/trips/:tripId/finalize', async (c) => {
   }
 });
 
-app.post('/api/trips/:tripId/invites', async (c) => {
+app.post('/trips/:tripId/invites', async (c) => {
   try {
     const authUser = await requireAuth(c.req.raw);
     const tripId = c.req.param('tripId');
@@ -427,7 +426,7 @@ app.post('/api/trips/:tripId/invites', async (c) => {
   }
 });
 
-app.post('/api/invites/accept', async (c) => {
+app.post('/invites/accept', async (c) => {
   try {
     const authUser = await requireAuth(c.req.raw);
     const body = parseBody<{ inviteToken?: string }>(await c.req.json());
@@ -472,5 +471,3 @@ app.post('/api/invites/accept', async (c) => {
 });
 
 export default app;
-
-serve({ fetch: app.fetch, port: 3000 });
