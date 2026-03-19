@@ -8,7 +8,7 @@ import { supabase } from '@/services/supabase';
 import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
 
-const OTP_LENGTH = 6;
+const OTP_LENGTH = 9;
 
 export default function EmailVerificationScreen() {
   const router = useRouter();
@@ -171,7 +171,7 @@ export default function EmailVerificationScreen() {
             <Animated.View style={[styles.textArea, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
               <Text style={styles.heading}>Enter verification code</Text>
               <Text style={styles.body}>
-                We sent a 6-digit code to
+                We sent a 9-digit code to
               </Text>
               <Text style={styles.emailText}>{email || 'your email'}</Text>
             </Animated.View>
@@ -189,7 +189,7 @@ export default function EmailVerificationScreen() {
                   onChangeText={(value) => handleOtpChange(value, index)}
                   onKeyPress={({ nativeEvent }) => handleKeyPress(nativeEvent.key, index)}
                   keyboardType="number-pad"
-                  maxLength={Platform.OS === 'web' ? 6 : 1}
+                  maxLength={Platform.OS === 'web' ? 9 : 1}
                   selectTextOnFocus
                   testID={`otp-input-${index}`}
                   autoFocus={index === 0}
@@ -328,18 +328,18 @@ const styles = StyleSheet.create({
   otpContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 10,
+    gap: 6,
     marginBottom: 32,
   },
   otpInput: {
-    width: 48,
-    height: 56,
-    borderRadius: 12,
+    width: 36,
+    height: 48,
+    borderRadius: 10,
     borderWidth: 1.5,
     borderColor: Colors.border,
     backgroundColor: Colors.bgInput,
     textAlign: 'center' as const,
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '700' as const,
     color: Colors.text,
   },
