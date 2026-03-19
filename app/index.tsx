@@ -10,7 +10,7 @@ const { width: W, height: H } = Dimensions.get('window');
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const { currentUser, isLoading } = useTrips();
+  const { currentUser, isLoading, isResettingPassword } = useTrips();
   const fadeIn = useRef(new Animated.Value(0)).current;
   const slideUp = useRef(new Animated.Value(30)).current;
   const bottomFade = useRef(new Animated.Value(0)).current;
@@ -18,6 +18,10 @@ export default function WelcomeScreen() {
   const bgPulse = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (isResettingPassword) {
+      console.log('Password reset in progress, skipping auto-navigation');
+      return;
+    }
     if (currentUser && !isLoading) {
       const nextRoute = currentUser.hasCompletedOnboarding ? '/dashboard' : '/onboarding';
       console.log('Routing from welcome screen', { nextRoute, hasCompletedOnboarding: currentUser.hasCompletedOnboarding });
@@ -41,7 +45,7 @@ export default function WelcomeScreen() {
       Animated.timing(bottomFade, { toValue: 1, duration: 700, delay: 700, useNativeDriver: true }),
       Animated.spring(bottomSlide, { toValue: 0, friction: 12, tension: 40, delay: 700, useNativeDriver: true }),
     ]).start();
-  }, [bgPulse, bottomFade, bottomSlide, currentUser, fadeIn, isLoading, router, slideUp]);
+  }, [bgPulse, bottomFade, bottomSlide, currentUser, fadeIn, isLoading, isResettingPassword, router, slideUp]);
 
   const bgScale = bgPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.1] });
 

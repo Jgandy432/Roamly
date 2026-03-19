@@ -16,6 +16,7 @@ import { ChevronLeft, KeyRound, ShieldCheck, Lock } from 'lucide-react-native';
 
 import { supabase } from '@/services/supabase';
 import { Colors } from '@/constants/colors';
+import { useTrips } from '@/context/TripContext';
 
 const OTP_LENGTH = 8;
 
@@ -23,6 +24,7 @@ type Step = 'email' | 'otp' | 'new-password';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
+  const { setIsResettingPassword } = useTrips();
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState<string>('');
   const [otp, setOtp] = useState<string[]>(Array(OTP_LENGTH).fill(''));
@@ -146,7 +148,8 @@ export default function ForgotPasswordScreen() {
         setStatusMessage(error.message);
         setStatusType('error');
       } else if (data.session) {
-        console.log('Recovery OTP verified, session created');
+        console.log('Recovery OTP verified, session created — staying on reset flow');
+        setIsResettingPassword(true);
         setStep('new-password');
       } else {
         console.log('Recovery OTP verified but no session');
@@ -160,7 +163,7 @@ export default function ForgotPasswordScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [isOtpComplete, email, otpCode]);
+  }, [isOtpComplete, email, otpCode, setIsResettingPassword]);
 
   const handleUpdatePassword = useCallback(async () => {
     if (newPassword.length < 8) {
@@ -183,7 +186,8 @@ export default function ForgotPasswordScreen() {
         setStatusMessage(error.message);
         setStatusType('error');
       } else {
-        console.log('Password updated successfully');
+        console.log('Password updated successfully, clearing reset flag');
+        setIsResettingPassword(false);
         Alert.alert('Password updated', 'Your password has been reset. You can now sign in.', [
           { text: 'Sign In', onPress: () => router.replace('/login') },
         ]);
@@ -195,7 +199,7 @@ export default function ForgotPasswordScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, [newPassword, confirmPassword, router]);
+  }, [newPassword, confirmPassword, router, setIsResettingPassword]);
 
   const handleResendCode = useCallback(async () => {
     setStatusMessage('');

@@ -109,6 +109,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [genProgress, setGenProgress] = useState<string>('');
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
+  const [isResettingPassword, setIsResettingPassword] = useState<boolean>(false);
 
   useEffect(() => {
     console.log('Setting up Supabase auth listener');
@@ -129,6 +130,10 @@ export const [TripProvider, useTrips] = createContextHook(() => {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, supaSession) => {
       console.log('Supabase auth state changed:', _event);
+      if (_event === 'PASSWORD_RECOVERY') {
+        console.log('Password recovery event detected, skipping session update');
+        return;
+      }
       if (supaSession?.user) {
         const appUser = supabaseUserToAppUser(supaSession.user);
         const authSession: AuthSession = {
@@ -446,6 +451,8 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     isSavingTrip: createTripMutation.isPending,
     setActiveTrip,
     setActiveTripPlan,
+    isResettingPassword,
+    setIsResettingPassword,
   }), [
     activeTrip,
     activeTripPlan,
@@ -470,5 +477,6 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     submitPreferences,
     trips,
     tripsQuery.isLoading,
+    isResettingPassword,
   ]);
 });
