@@ -33,7 +33,9 @@ export default function SignupScreen() {
       await signup(name.trim(), email.trim().toLowerCase(), password);
       router.replace('/onboarding');
     } catch (error) {
-      Alert.alert('Signup failed', error instanceof Error ? error.message : 'Unable to create account');
+      const message = error instanceof Error ? error.message : 'Unable to create account';
+      console.log('Signup error details:', message);
+      Alert.alert('Signup failed', message);
     }
   };
 

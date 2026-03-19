@@ -45,6 +45,7 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
 
   const url = getApiUrl(path);
   console.log('API request starting', { path, url, method: options.method ?? 'GET' });
+  console.log('FULL API URL:', url, 'BASE:', process.env.EXPO_PUBLIC_RORK_API_BASE_URL);
 
   const response = await fetch(url, {
     ...options,
