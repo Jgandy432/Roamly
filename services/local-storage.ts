@@ -15,6 +15,103 @@ import {
 const USERS_KEY = 'roamly_users';
 const TRIPS_KEY = 'roamly_trips';
 
+const DUMMY_NAMES = [
+  'Alex Rivera', 'Maya Chen', 'Jordan Lee', 'Priya Patel', 'Sam Brooks',
+  'Olivia Kim', 'Marcus Johnson', 'Zara Ahmed', 'Tyler Nguyen', 'Chloe Davis',
+  'Ethan Park', 'Sofia Martinez', 'Liam O\'Brien', 'Aisha Khan', 'Noah Williams',
+  'Isabella Torres', 'Kai Nakamura', 'Emma Johansson', 'Diego Santos', 'Mia Thompson',
+];
+
+const AIRPORTS = ['JFK', 'LAX', 'ORD', 'ATL', 'SFO', 'MIA', 'DFW', 'SEA', 'BOS', 'DEN'];
+const ACCOM_TYPES = ['hotel', 'airbnb', 'hostel', 'resort'];
+const ACCOM_MUST_HAVES = ['wifi', 'pool', 'kitchen', 'parking', 'gym', 'washer', 'air conditioning', 'pet friendly'];
+const ACTIVITY_INTERESTS = ['beach', 'hiking', 'nightlife', 'museums', 'food tours', 'shopping', 'water sports', 'photography', 'live music', 'spa', 'sightseeing', 'adventure sports'];
+const DINING_STYLES = ['casual', 'fine dining', 'street food', 'mix of everything'];
+const DIETARY = ['vegetarian', 'vegan', 'gluten-free', 'halal', 'kosher', 'dairy-free', 'nut allergy'];
+const BUDGET_FLEX = ['strict', 'flexible', 'very flexible'];
+const FLIGHT_TIMES = ['morning', 'afternoon', 'evening'];
+const NONSTOP_OPTIONS = ['yes', 'flexible'];
+const MUST_HAVES = ['Good Wi-Fi everywhere', 'Beach access', 'Central location', 'Walkable area', 'Near nightlife', 'Quiet neighborhood', 'Great food scene', 'Nature nearby'];
+const DEAL_BREAKERS = ['Shared bathrooms', 'No A/C', 'Far from city center', 'No public transit', 'Noisy area', 'Limited food options', 'Long layovers', 'No Wi-Fi'];
+const MUST_DO_ACTIVITIES = ['Visit the main landmark', 'Try local street food', 'Sunset boat tour', 'Hike to the viewpoint', 'Visit the night market', 'Snorkeling trip', 'Cooking class', 'City walking tour'];
+const WONT_DO_ACTIVITIES = ['Bungee jumping', 'Extreme heights', 'Long bus rides', 'Crowded tourist traps', 'Early morning tours', 'Camping', 'Cave diving', 'Nothing specific'];
+
+function pickRandom<T>(arr: T[]): T {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function pickRandomN<T>(arr: T[], min: number, max: number): T[] {
+  const count = min + Math.floor(Math.random() * (max - min + 1));
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+function randBetween(min: number, max: number): number {
+  return Math.round(min + Math.random() * (max - min));
+}
+
+function generateDummyDates(startDate?: string, _endDate?: string): string[] {
+  const count = randBetween(2, 3);
+  const base = startDate ? new Date(startDate) : new Date();
+  const dates: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(base);
+    d.setDate(d.getDate() + randBetween(-2, 5));
+    dates.push(d.toISOString().split('T')[0]);
+  }
+  return dates;
+}
+
+function generateDummyPreferences(startDate?: string, endDate?: string): UserPreferences {
+  return {
+    availableDates: generateDummyDates(startDate, endDate),
+    flightAirport: pickRandom(AIRPORTS),
+    flightNonstop: pickRandom(NONSTOP_OPTIONS),
+    flightDepartTime: pickRandom(FLIGHT_TIMES),
+    flightBudget: randBetween(200, 800),
+    accommodationType: pickRandom(ACCOM_TYPES),
+    accommodationNightlyBudget: randBetween(50, 300),
+    accommodationMustHaves: pickRandomN(ACCOM_MUST_HAVES, 2, 3),
+    needsRentalCar: pickRandom(['yes', 'no']),
+    isDriver: pickRandom(['yes', 'no']),
+    vehiclePreference: pickRandom(['sedan', 'suv', 'van', 'compact']),
+    activityInterests: pickRandomN(ACTIVITY_INTERESTS, 2, 4),
+    activityDailyBudget: randBetween(30, 150),
+    activityMustDo: pickRandom(MUST_DO_ACTIVITIES),
+    activityWontDo: pickRandom(WONT_DO_ACTIVITIES),
+    diningStyle: pickRandom(DINING_STYLES),
+    dietaryRestrictions: pickRandomN(DIETARY, 0, 2),
+    foodDailyBudget: randBetween(30, 120),
+    foodMustHaves: pickRandomN(['local cuisine', 'seafood', 'brunch spots', 'coffee shops', 'rooftop bars'], 1, 2),
+    totalBudget: randBetween(1000, 5000),
+    budgetFlexibility: pickRandom(BUDGET_FLEX),
+    mustHave: pickRandom(MUST_HAVES),
+    dealBreaker: pickRandom(DEAL_BREAKERS),
+  };
+}
+
+function generateDummyMembers(count: number, startDate?: string, endDate?: string): TripMember[] {
+  const shuffledNames = [...DUMMY_NAMES].sort(() => Math.random() - 0.5);
+  const members: TripMember[] = [];
+  for (let i = 0; i < count; i++) {
+    const name = shuffledNames[i % shuffledNames.length];
+    const emailName = name.toLowerCase().replace(/[^a-z ]/g, '').replace(/\s+/g, '.');
+    const uid = generateId();
+    members.push({
+      id: generateId(),
+      userId: uid,
+      name,
+      email: `${emailName}@example.com`,
+      avatar: '',
+      role: 'editor',
+      joinedAt: new Date().toISOString(),
+      preferencesSubmitted: true,
+      preferences: generateDummyPreferences(startDate, endDate),
+    });
+  }
+  return members;
+}
+
 interface StoredUser {
   id: string;
   name: string;
@@ -146,6 +243,12 @@ export const localApi = {
       preferencesSubmitted: false,
     };
 
+    const dummyCount = Math.max(0, (tripData.groupSize || 1) - 1);
+    const dummyMembers = dummyCount > 0
+      ? generateDummyMembers(dummyCount, tripData.startDate, tripData.endDate)
+      : [];
+    console.log('localApi.createTrip generating', dummyCount, 'dummy members');
+
     const trip: Trip = {
       id: generateId(),
       name: tripData.name,
@@ -157,7 +260,7 @@ export const localApi = {
       description: tripData.description,
       createdBy: userId,
       createdAt: new Date().toISOString(),
-      members: [ownerMember],
+      members: [ownerMember, ...dummyMembers],
       invites: [],
       status: 'collecting',
       plan: null,
