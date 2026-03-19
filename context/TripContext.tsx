@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateObject } from '@rork-ai/toolkit-sdk';
 import { z } from 'zod';
 
-import { api } from '@/services/api';
+import { localApi } from '@/services/local-storage';
 import { generateFallbackPlan } from '@/utils/fallback-plan';
 import { AppUser, AuthSession, FinalizedChoices, Trip, TripData, TripMember, TripPlan, TripMemberRole, UserPreferences } from '@/types/trip';
 
@@ -120,7 +120,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     enabled: !!session?.token,
     queryFn: async () => {
       if (!session?.token) return [] as Trip[];
-      const response = await api.listTrips(session.token);
+      const response = await localApi.listTrips(session.token);
       return response.trips;
     },
   });
@@ -145,9 +145,9 @@ export const [TripProvider, useTrips] = createContextHook(() => {
   const authMutation = useMutation({
     mutationFn: async (input: { mode: 'login' | 'signup'; name?: string; email: string; password: string }) => {
       if (input.mode === 'signup') {
-        return api.signup({ name: input.name ?? '', email: input.email, password: input.password });
+        return localApi.signup({ name: input.name ?? '', email: input.email, password: input.password });
       }
-      return api.login({ email: input.email, password: input.password });
+      return localApi.login({ email: input.email, password: input.password });
     },
     onSuccess: async (response) => {
       console.log('Auth success', { userId: response.session.user.id, email: response.session.user.email });
@@ -162,7 +162,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
   const logoutMutation = useMutation({
     mutationFn: async () => {
       if (session?.token) {
-        await api.logout(session.token);
+        await localApi.logout(session.token);
       }
       return true;
     },
@@ -182,7 +182,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
   const createTripMutation = useMutation({
     mutationFn: async (tripData: TripData) => {
       if (!session?.token) throw new Error('Not logged in');
-      return api.createTrip(session.token, tripData);
+      return localApi.createTrip(session.token, tripData);
     },
     onSuccess: ({ trip }) => {
       setActiveTripId(trip.id);
@@ -194,7 +194,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
   const savePreferencesMutation = useMutation({
     mutationFn: async (preferences: UserPreferences) => {
       if (!session?.token || !activeTripId) throw new Error('No active trip');
-      return api.savePreferences(session.token, activeTripId, preferences);
+      return localApi.savePreferences(session.token, activeTripId, preferences);
     },
     onSuccess: ({ trip }) => {
       setActiveTripId(trip.id);
@@ -206,7 +206,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
   const savePlanMutation = useMutation({
     mutationFn: async (plan: TripPlan) => {
       if (!session?.token || !activeTripId) throw new Error('No active trip');
-      return api.savePlan(session.token, activeTripId, plan);
+      return localApi.savePlan(session.token, activeTripId, plan);
     },
     onSuccess: ({ trip }) => {
       setActiveTripId(trip.id);
@@ -218,7 +218,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
   const voteMutation = useMutation({
     mutationFn: async (input: { itemId: string; vote: 'up' | 'down' }) => {
       if (!session?.token || !activeTripId) throw new Error('No active trip');
-      return api.vote(session.token, activeTripId, input.itemId, input.vote);
+      return localApi.vote(session.token, activeTripId, input.itemId, input.vote);
     },
     onSuccess: ({ trip }) => {
       setActiveTripId(trip.id);
@@ -229,7 +229,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
   const finalizeMutation = useMutation({
     mutationFn: async (finalized: FinalizedChoices) => {
       if (!session?.token || !activeTripId) throw new Error('No active trip');
-      return api.finalize(session.token, activeTripId, finalized);
+      return localApi.finalize(session.token, activeTripId, finalized);
     },
     onSuccess: ({ trip }) => {
       setActiveTripId(trip.id);
@@ -241,7 +241,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
   const inviteMutation = useMutation({
     mutationFn: async (input: { email: string; role: TripMemberRole }) => {
       if (!session?.token || !activeTripId) throw new Error('No active trip');
-      return api.invite(session.token, activeTripId, input.email, input.role);
+      return localApi.invite(session.token, activeTripId, input.email, input.role);
     },
     onSuccess: ({ trip }) => {
       setActiveTripId(trip.id);
@@ -252,7 +252,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
   const onboardingMutation = useMutation({
     mutationFn: async () => {
       if (!session?.token) throw new Error('Not logged in');
-      return api.completeOnboarding(session.token);
+      return localApi.completeOnboarding(session.token);
     },
     onSuccess: async ({ user }) => {
       const nextSession = session ? { ...session, user } : null;
