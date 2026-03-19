@@ -2,30 +2,66 @@ import { AuthResponse, AppUser, FinalizedChoices, Trip, TripData, TripInvite, Tr
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
 
+interface ApiErrorPayload {
+  error?: string;
+  message?: string;
+}
+
 function getApiUrl(path: string): string {
   if (!API_BASE_URL) {
     throw new Error('Missing EXPO_PUBLIC_RORK_API_BASE_URL');
   }
-  return `${API_BASE_URL}/api${path}`;
+
+  const normalizedBaseUrl = API_BASE_URL.endsWith('/api')
+    ? API_BASE_URL.slice(0, -4)
+    : API_BASE_URL;
+
+  return `${normalizedBaseUrl}/api${path}`;
+}
+
+function parseResponseBody(text: string): Record<string, unknown> | null {
+  if (!text.trim()) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch (error) {
+    console.log('API response was not valid JSON', {
+      message: error instanceof Error ? error.message : 'unknown',
+      preview: text.slice(0, 160),
+    });
+    return null;
+  }
 }
 
 async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   const headers = new Headers(options.headers ?? {});
   headers.set('Content-Type', 'application/json');
+  headers.set('Accept', 'application/json');
   if (token) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(getApiUrl(path), {
+  const url = getApiUrl(path);
+  console.log('API request starting', { path, url, method: options.method ?? 'GET' });
+
+  const response = await fetch(url, {
     ...options,
     headers,
   });
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) as Record<string, unknown> : {};
+  const data = parseResponseBody(text);
 
   if (!response.ok) {
-    throw new Error(typeof data.error === 'string' ? data.error : 'Request failed');
+    const errorPayload = (data ?? {}) as ApiErrorPayload;
+    const fallbackMessage = text.trim() || `Request failed with status ${response.status}`;
+    throw new Error(errorPayload.error ?? errorPayload.message ?? fallbackMessage);
+  }
+
+  if (data === null) {
+    throw new Error('The server returned an invalid response. Please try again.');
   }
 
   return data as T;
