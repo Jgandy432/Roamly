@@ -167,18 +167,21 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     }
   }, [activeTrip]);
 
-  const authMutation = useMutation({
-    mutationFn: async (input: { mode: 'login' | 'signup'; name?: string; email: string; password: string }) => {
-      if (input.mode === 'signup') {
-        return localApi.signup({ name: input.name ?? '', email: input.email, password: input.password });
-      }
+  const loginMutation = useMutation({
+    mutationFn: async (input: { email: string; password: string }) => {
       return localApi.login({ email: input.email, password: input.password });
     },
     onSuccess: async (response) => {
-      console.log('Auth success', { userId: response.session.user.id, email: response.session.user.email });
+      console.log('Login success', { userId: response.session.user.id, email: response.session.user.email });
       setSession(response.session);
       setCurrentUser(response.session.user);
       void queryClient.invalidateQueries({ queryKey: ['trips'] });
+    },
+  });
+
+  const signupMutation = useMutation({
+    mutationFn: async (input: { name: string; email: string; password: string }) => {
+      return localApi.signup({ name: input.name, email: input.email, password: input.password });
     },
   });
 
@@ -283,14 +286,22 @@ export const [TripProvider, useTrips] = createContextHook(() => {
   });
 
   const login = useCallback(async (email: string, password: string) => {
-    const response = await authMutation.mutateAsync({ mode: 'login', email, password });
+    const response = await loginMutation.mutateAsync({ email, password });
     return response.session.user;
-  }, [authMutation]);
+  }, [loginMutation]);
 
-  const signup = useCallback(async (name: string, email: string, password: string) => {
-    const response = await authMutation.mutateAsync({ mode: 'signup', name, email, password });
-    return response.session.user;
-  }, [authMutation]);
+  const signup = useCallback(async (name: string, email: string, password: string): Promise<{ user: AppUser; emailConfirmationRequired: boolean }> => {
+    const response = await signupMutation.mutateAsync({ name, email, password });
+    if (response.emailConfirmationRequired) {
+      console.log('Signup requires email confirmation', { email });
+      return { user: response.session.user, emailConfirmationRequired: true };
+    }
+    console.log('Signup success, session created', { userId: response.session.user.id });
+    setSession(response.session);
+    setCurrentUser(response.session.user);
+    void queryClient.invalidateQueries({ queryKey: ['trips'] });
+    return { user: response.session.user, emailConfirmationRequired: false };
+  }, [signupMutation, queryClient]);
 
   const logout = useCallback(() => {
     logoutMutation.mutate();
@@ -420,7 +431,7 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     activeTripPlan,
     isGenerating,
     genProgress,
-    isLoading: isInitializing || tripsQuery.isLoading || authMutation.isPending,
+    isLoading: isInitializing || tripsQuery.isLoading || loginMutation.isPending || signupMutation.isPending,
     login,
     signup,
     logout,
@@ -431,14 +442,15 @@ export const [TripProvider, useTrips] = createContextHook(() => {
     finalizePlan,
     completeOnboarding,
     inviteCollaborator,
-    isAuthLoading: authMutation.isPending,
+    isAuthLoading: loginMutation.isPending || signupMutation.isPending,
     isSavingTrip: createTripMutation.isPending,
     setActiveTrip,
     setActiveTripPlan,
   }), [
     activeTrip,
     activeTripPlan,
-    authMutation.isPending,
+    loginMutation.isPending,
+    signupMutation.isPending,
     castVote,
     completeOnboarding,
     createTrip,

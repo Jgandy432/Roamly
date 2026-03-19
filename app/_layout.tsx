@@ -6,7 +6,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { TripProvider } from "@/context/TripContext";
 import { Colors } from "@/constants/colors";
 
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
@@ -30,13 +30,14 @@ function RootLayoutNav() {
       <Stack.Screen name="preferences" />
       <Stack.Screen name="profile" />
       <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
+      <Stack.Screen name="email-verification" options={{ gestureEnabled: false }} />
     </Stack>
   );
 }
 
 export default function RootLayout() {
   useEffect(() => {
-    SplashScreen.hideAsync();
+    void SplashScreen.hideAsync();
   }, []);
 
   return (

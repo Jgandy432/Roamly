@@ -30,8 +30,13 @@ export default function SignupScreen() {
     if (!isValid) return;
     try {
       console.log('Submitting signup request', { email });
-      await signup(name.trim(), email.trim().toLowerCase(), password);
-      router.replace('/onboarding');
+      const result = await signup(name.trim(), email.trim().toLowerCase(), password);
+      if (result.emailConfirmationRequired) {
+        console.log('Email confirmation required, navigating to verification screen');
+        router.replace({ pathname: '/email-verification', params: { email: email.trim().toLowerCase() } });
+      } else {
+        router.replace('/onboarding');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to create account';
       console.log('Signup error details:', message);

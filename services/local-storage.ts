@@ -138,7 +138,7 @@ function supabaseUserToAppUser(user: { id: string; email?: string; user_metadata
 }
 
 export const localApi = {
-  async signup(input: { name: string; email: string; password: string }): Promise<AuthResponse> {
+  async signup(input: { name: string; email: string; password: string }): Promise<AuthResponse & { emailConfirmationRequired?: boolean }> {
     console.log('localApi.signup via Supabase', { email: input.email });
     const { data, error } = await supabase.auth.signUp({
       email: input.email,
@@ -163,14 +163,14 @@ export const localApi = {
     }
 
     if (!data.session) {
-      console.log('Supabase signup: no session returned, email confirmation may be required');
+      console.log('Supabase signup: no session returned, email confirmation required');
       const appUser = supabaseUserToAppUser(data.user);
-      return { session: { token: `pending_${data.user.id}`, user: appUser } };
+      return { session: { token: '', user: appUser }, emailConfirmationRequired: true };
     }
 
     const appUser = supabaseUserToAppUser(data.user);
     console.log('Supabase signup success', { userId: data.user.id });
-    return { session: { token: data.session.access_token, user: appUser } };
+    return { session: { token: data.session.access_token, user: appUser }, emailConfirmationRequired: false };
   },
 
   async login(input: { email: string; password: string }): Promise<AuthResponse> {
