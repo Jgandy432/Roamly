@@ -6,7 +6,6 @@ import { ChevronLeft } from 'lucide-react-native';
 
 import { useTrips } from '@/context/TripContext';
 import { Colors } from '@/constants/colors';
-import { supabase } from '@/services/supabase';
 import BottomTabBar from '@/components/BottomTabBar';
 
 export default function LoginScreen() {
@@ -14,7 +13,6 @@ export default function LoginScreen() {
   const { login, isAuthLoading } = useTrips();
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
-  const [resetSending, setResetSending] = useState<boolean>(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(24)).current;
 
@@ -27,22 +25,8 @@ export default function LoginScreen() {
 
   const isValid = email.includes('@') && password.length >= 8;
 
-  const handleForgotPassword = async () => {
-    const trimmed = email.trim().toLowerCase();
-    if (!trimmed.includes('@')) {
-      Alert.alert('Enter your email', 'Please enter your email address above, then tap Forgot password.');
-      return;
-    }
-    setResetSending(true);
-    try {
-      const { error } = await supabase.auth.resetPasswordForEmail(trimmed);
-      if (error) throw error;
-      Alert.alert('Check your email', 'We sent a password reset link to ' + trimmed + '.');
-    } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Unable to send reset email');
-    } finally {
-      setResetSending(false);
-    }
+  const handleForgotPassword = () => {
+    router.push('/forgot-password');
   };
 
   const handleContinue = async () => {
@@ -72,8 +56,8 @@ export default function LoginScreen() {
               <Text style={styles.subtitle}>Sign in with your Roamly account.</Text>
               <TextInput style={styles.input} placeholder="you@example.com" placeholderTextColor={Colors.textDark} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} testID="email-input" />
               <TextInput style={styles.input} placeholder="Password" placeholderTextColor={Colors.textDark} value={password} onChangeText={setPassword} secureTextEntry testID="password-input" />
-              <TouchableOpacity onPress={handleForgotPassword} disabled={resetSending} testID="forgot-password-btn">
-                <Text style={styles.forgotText}>{resetSending ? 'Sending...' : 'Forgot password?'}</Text>
+              <TouchableOpacity onPress={handleForgotPassword} testID="forgot-password-btn">
+                <Text style={styles.forgotText}>Forgot password?</Text>
               </TouchableOpacity>
             </Animated.View>
 
